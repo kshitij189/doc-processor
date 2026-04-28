@@ -1,0 +1,52 @@
+Software License Agreement
+===========================
+
+AGREEMENT made effective as of January 15, 2025
+
+BETWEEN:
+  Licensor: DocProcessor Inc., a Delaware corporation
+  Licensee: Acme Corporation, a California corporation
+
+TERMS AND CONDITIONS
+
+1. GRANT OF LICENSE
+The Licensor hereby grants to the Licensee a non-exclusive, non-transferable license
+to use the DocProcessor software ("Software") subject to the terms and conditions
+set forth in this Agreement.
+
+2. SCOPE OF USE
+The Licensee may install and use the Software on up to 100 concurrent user workstations
+within its organization. Any use beyond this scope requires written authorization.
+
+3. INTELLECTUAL PROPERTY
+All intellectual property rights in the Software remain the exclusive property of the
+Licensor. The Licensee shall not reverse engineer, decompile, or disassemble the Software.
+
+4. TERM
+This Agreement is effective for a period of 12 months from the Effective Date and shall
+automatically renew for successive 12-month periods unless terminated by either party
+with 90 days written notice.
+
+5. FEES AND PAYMENT
+The Licensee shall pay an annual license fee of $50,000 (fifty thousand dollars),
+payable within 30 days of invoice date. Late payments shall accrue interest at 1.5%
+per month.
+
+6. WARRANTY
+The Licensor warrants that the Software will perform substantially in accordance with
+the documentation for a period of 90 days from delivery.
+
+7. LIMITATION OF LIABILITY
+In no event shall either party be liable for any indirect, incidental, special, or
+consequential damages arising out of this Agreement, regardless of the cause of action.
+
+8. CONFIDENTIALITY
+Both parties agree to maintain the confidentiality of any proprietary information
+disclosed under this Agreement for a period of 5 years following termination.
+
+9. GOVERNING LAW
+This Agreement shall be governed by the laws of the State of Delaware.
+
+SIGNATURES:
+____________________    ____________________
+DocProcessor Inc.       Acme Corporation

@@ -1,0 +1,47 @@
+John Doe
+Senior Software Engineer
+john.doe@email.com | (555) 123-4567 | San Francisco, CA
+LinkedIn: linkedin.com/in/johndoe | GitHub: github.com/johndoe
+
+Professional Summary
+--------------------
+Experienced software engineer with 8+ years of experience in full-stack development,
+distributed systems, and cloud architecture. Passionate about building scalable
+applications and leading engineering teams.
+
+Technical Skills
+----------------
+Languages: Python, TypeScript, Java, Go, Rust
+Frameworks: React, FastAPI, Django, Spring Boot, Next.js
+Databases: PostgreSQL, MongoDB, Redis, Elasticsearch
+Cloud: AWS, GCP, Docker, Kubernetes
+Tools: Git, CI/CD, Terraform, Kafka, RabbitMQ
+
+Professional Experience
+-----------------------
+
+Senior Software Engineer | TechCorp Inc. | 2021 - Present
+- Led development of microservices architecture serving 10M+ daily requests
+- Designed and implemented real-time data pipeline using Kafka and Flink
+- Reduced system latency by 40% through caching and query optimization
+- Mentored team of 5 junior engineers
+
+Software Engineer | StartupXYZ | 2018 - 2021
+- Built full-stack web application from scratch using React and Django
+- Implemented CI/CD pipelines reducing deployment time by 60%
+- Developed REST APIs handling 500K+ daily transactions
+
+Junior Developer | WebAgency | 2016 - 2018
+- Developed responsive web applications for enterprise clients
+- Contributed to open-source projects with 1000+ GitHub stars
+
+Education
+---------
+B.S. Computer Science | Stanford University | 2016
+GPA: 3.8/4.0 | Dean's List
+
+Certifications
+--------------
+- AWS Solutions Architect Professional
+- Google Cloud Professional Data Engineer
+- Certified Kubernetes Administrator (CKA)
