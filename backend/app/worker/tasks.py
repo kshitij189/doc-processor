@@ -207,7 +207,21 @@ def process_document(self, document_id: str):
         )
         session.add(result)
 
-        # --- Stage 7: Job Completed ---
+        # --- Stage 7: RAG Embedding ---
+        publish_progress(doc_id, "embedding_started", 92, "Generating embeddings for RAG...")
+        try:
+            from app.services.rag_service import semantic_chunk, batch_embed_and_store
+            chunks = semantic_chunk(raw_text)
+            if chunks:
+                batch_embed_and_store(doc_id, chunks)
+                publish_progress(doc_id, "embedding_completed", 97, f"Embedded {len(chunks)} chunks for RAG")
+            else:
+                publish_progress(doc_id, "embedding_completed", 97, "No chunks to embed")
+        except Exception as emb_err:
+            # Embedding failure should not fail the whole pipeline
+            publish_progress(doc_id, "embedding_warning", 97, f"Embedding skipped: {str(emb_err)[:100]}")
+
+        # --- Stage 8: Job Completed ---
         doc.status = DocumentStatus.COMPLETED
         doc.error_message = None
         session.commit()

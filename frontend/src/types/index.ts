@@ -44,3 +44,35 @@ export interface UploadResponse {
   documents: Document[];
   message: string;
 }
+
+// --- Chat / RAG Types ---
+
+export interface ChatSource {
+  text: string;
+  document_id: string;
+  chunk_index: number;
+  score: number;
+}
+
+export interface ChatResponse {
+  answer: string;
+  sources: ChatSource[];
+  pipeline_info: Record<string, any>;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: ChatSource[];
+  pipeline_info?: Record<string, any>;
+  timestamp: Date;
+}
+
+export interface RAGStatus {
+  api_key_configured: boolean;
+  embedding_model: string;
+  reranker_model: string;
+  collections: number;
+  total_chunks: number;
+}

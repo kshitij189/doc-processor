@@ -41,8 +41,11 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       UPLOAD_DIR: /app/uploads
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      CHROMA_DIR: /app/chromadb_data
     volumes:
       - uploads:/app/uploads
+      - chromadb_data:/app/chromadb_data
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,7 +55,7 @@ services:
   # --- Celery Worker ---
   celery-worker:
     build: ./backend
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=4
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/docprocessor
       DATABASE_URL_SYNC: postgresql://postgres:postgres@postgres:5432/docprocessor
@@ -60,8 +63,11 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       UPLOAD_DIR: /app/uploads
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      CHROMA_DIR: /app/chromadb_data
     volumes:
       - uploads:/app/uploads
+      - chromadb_data:/app/chromadb_data
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,3 +85,4 @@ services:
 volumes:
   pgdata:
   uploads:
+  chromadb_data:
