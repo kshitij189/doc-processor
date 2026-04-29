@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
     # --- RAG Configuration ---
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
     CHROMA_DIR: str = os.getenv("CHROMA_DIR", "./chromadb_data")
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     RERANKER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"

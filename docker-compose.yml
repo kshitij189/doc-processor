@@ -39,7 +39,7 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       UPLOAD_DIR: /app/uploads
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       CHROMA_DIR: /app/chromadb_data
     volumes:
       - uploads:/app/uploads
@@ -61,7 +61,7 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       UPLOAD_DIR: /app/uploads
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       CHROMA_DIR: /app/chromadb_data
     volumes:
       - uploads:/app/uploads

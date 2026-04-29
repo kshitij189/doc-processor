@@ -23,7 +23,7 @@ import tiktoken
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
-import google.generativeai as genai
+from openai import OpenAI
 
 from app.config import settings
 
@@ -403,12 +403,14 @@ def rewrite_query(original_query: str) -> list[str]:
     Use Gemini to rewrite/expand a user query into multiple variations
     for better retrieval recall.
     """
-    if not settings.GEMINI_API_KEY:
+    if not settings.OPENROUTER_API_KEY:
         return [original_query]
 
     try:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=settings.OPENROUTER_API_KEY,
+        )
 
         prompt = f"""Given the user question below, generate 2 alternative phrasings 
 that would help retrieve relevant document chunks. Return ONLY the queries, 
@@ -416,10 +418,14 @@ one per line, no numbering or bullets.
 
 Original question: {original_query}"""
 
-        response = model.generate_content(prompt)
+        response = client.chat.completions.create(
+            model="google/gemini-2.0-flash:free",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        content_text = response.choices[0].message.content or ""
         variations = [
             line.strip()
-            for line in response.text.strip().split("\n")
+            for line in content_text.strip().split("\n")
             if line.strip()
         ]
         all_queries = [original_query] + variations[:2]
@@ -491,12 +497,14 @@ def generate_answer_stream(
     Generate a streaming answer using Gemini, grounded in the retrieved context.
     Yields text chunks as they arrive.
     """
-    if not settings.GEMINI_API_KEY:
-        yield "Error: GEMINI_API_KEY is not configured."
+    if not settings.OPENROUTER_API_KEY:
+        yield "Error: OPENROUTER_API_KEY is not configured."
         return
 
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=settings.OPENROUTER_API_KEY,
+    )
 
     prompt = f"""You are a helpful document analysis assistant. Answer the user's 
 question based ONLY on the provided document context below. If the context doesn't 
@@ -512,12 +520,16 @@ QUESTION: {question}
 ANSWER:"""
 
     try:
-        response = model.generate_content(prompt, stream=True)
+        response = client.chat.completions.create(
+            model="google/gemini-2.0-flash:free",
+            messages=[{"role": "user", "content": prompt}],
+            stream=True
+        )
         for chunk in response:
-            if chunk.text:
-                yield chunk.text
+            if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
     except Exception as e:
-        logger.error("Gemini streaming failed: %s", e)
+        logger.error("LLM streaming failed: %s", e)
         yield f"Error generating answer: {str(e)}"
 
 
@@ -656,7 +668,7 @@ def rag_query(
 def get_rag_status() -> dict:
     """Check if RAG pipeline is available and ready."""
     status = {
-        "api_key_configured": bool(settings.GEMINI_API_KEY),
+        "api_key_configured": bool(settings.OPENROUTER_API_KEY),
         "embedding_model": settings.EMBEDDING_MODEL,
         "reranker_model": settings.RERANKER_MODEL,
         "collections": 0,
