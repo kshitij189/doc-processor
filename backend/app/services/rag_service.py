@@ -419,7 +419,7 @@ one per line, no numbering or bullets.
 Original question: {original_query}"""
 
         response = client.chat.completions.create(
-            model="google/gemini-2.0-flash:free",
+            model="openrouter/free",
             messages=[{"role": "user", "content": prompt}],
         )
         content_text = response.choices[0].message.content or ""
@@ -521,7 +521,7 @@ ANSWER:"""
 
     try:
         response = client.chat.completions.create(
-            model="google/gemini-2.0-flash:free",
+            model="openrouter/free",
             messages=[{"role": "user", "content": prompt}],
             stream=True
         )
