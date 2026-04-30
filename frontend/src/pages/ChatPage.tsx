@@ -7,6 +7,12 @@ import {
 import { fetchDocuments, streamChatMessage, fetchRAGStatus } from '../api/client';
 import type { ChatMessage, ChatSource, Document, RAGStatus } from '../types';
 
+// Convert raw logit scores (unbounded) to a 0-100% boundary using the sigmoid function
+const formatLogitAsPercentage = (logit: number): string => {
+  const sigmoid = 1 / (1 + Math.exp(-logit));
+  return (sigmoid * 100).toFixed(1);
+};
+
 const ChatPage: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -262,7 +268,7 @@ const ChatPage: React.FC = () => {
                           <div className="source-header">
                             <span className="source-badge">Source {i + 1}</span>
                             <span className="source-score">
-                              Relevance: {(src.score * 100).toFixed(1)}%
+                              Relevance: {formatLogitAsPercentage(src.score)}%
                             </span>
                             {src.document_id && (
                               <Link to={`/documents/${src.document_id}`} className="source-doc-link">
