@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Document, DocumentListResponse, UploadResponse, ChatResponse, RAGStatus } from '../types';
+import type { Document, DocumentListResponse, UploadResponse, ChatResponse, RAGStatus, ChatSession } from '../types';
 
 const API_BASE = '/api';
 
@@ -64,13 +64,30 @@ export function getBulkExportUrl(format: 'json' | 'csv', finalizedOnly = true): 
 
 // --- Chat / RAG ---
 
+export async function createChatSession(title: string = "New Conversation"): Promise<ChatSession> {
+  const { data } = await api.post<ChatSession>('/chat/sessions', { title });
+  return data;
+}
+
+export async function fetchChatSessions(): Promise<ChatSession[]> {
+  const { data } = await api.get<ChatSession[]>('/chat/sessions');
+  return data;
+}
+
+export async function fetchChatSession(sessionId: string): Promise<ChatSession> {
+  const { data } = await api.get<ChatSession>(`/chat/sessions/${sessionId}`);
+  return data;
+}
+
 export async function sendChatMessage(
   question: string,
-  documentIds?: string[]
+  documentIds?: string[],
+  sessionId?: string
 ): Promise<ChatResponse> {
   const { data } = await api.post<ChatResponse>('/chat', {
     question,
     document_ids: documentIds,
+    session_id: sessionId,
   });
   return data;
 }
@@ -87,6 +104,7 @@ export async function fetchRAGStatus(): Promise<RAGStatus> {
 export function streamChatMessage(
   question: string,
   documentIds: string[] | undefined,
+  sessionId: string | undefined,
   callbacks: {
     onToken: (token: string) => void;
     onSources: (sources: any[], pipelineInfo: any) => void;
@@ -99,7 +117,7 @@ export function streamChatMessage(
   fetch(`${API_BASE}/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, document_ids: documentIds }),
+    body: JSON.stringify({ question, document_ids: documentIds, session_id: sessionId }),
     signal: controller.signal,
   })
     .then(async (response) => {

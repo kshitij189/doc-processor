@@ -419,7 +419,7 @@ one per line, no numbering or bullets.
 Original question: {original_query}"""
 
         response = client.chat.completions.create(
-            model="openrouter/free",
+            model="google/gemini-2.0-flash-lite-preview-02-05:free",
             messages=[{"role": "user", "content": prompt}],
         )
         content_text = response.choices[0].message.content or ""
@@ -492,6 +492,7 @@ def build_context(chunks: list[dict], max_tokens: int = None) -> str:
 def generate_answer_stream(
     question: str,
     context: str,
+    history: Optional[list[dict]] = None,
 ) -> Generator[str, None, None]:
     """
     Generate a streaming answer using Gemini, grounded in the retrieved context.
@@ -519,10 +520,17 @@ QUESTION: {question}
 
 ANSWER:"""
 
+    messages = []
+    if history:
+        for msg in history:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+            
+    messages.append({"role": "user", "content": prompt})
+
     try:
         response = client.chat.completions.create(
-            model="openrouter/free",
-            messages=[{"role": "user", "content": prompt}],
+            model="google/gemini-2.0-flash-lite-preview-02-05:free",
+            messages=messages,
             stream=True
         )
         for chunk in response:
@@ -533,9 +541,9 @@ ANSWER:"""
         yield f"Error generating answer: {str(e)}"
 
 
-def generate_answer(question: str, context: str) -> str:
+def generate_answer(question: str, context: str, history: Optional[list[dict]] = None) -> str:
     """Non-streaming version for simpler use cases."""
-    parts = list(generate_answer_stream(question, context))
+    parts = list(generate_answer_stream(question, context, history))
     return "".join(parts)
 
 
@@ -569,6 +577,7 @@ def rag_query(
     question: str,
     document_ids: Optional[list[str]] = None,
     stream: bool = False,
+    history: Optional[list[dict]] = None,
 ) -> dict:
     """
     Full production RAG pipeline:

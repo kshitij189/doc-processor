@@ -32,6 +32,10 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - uploads:/app/uploads
+      - chromadb_data:/app/chromadb_data
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/docprocessor
       DATABASE_URL_SYNC: postgresql://postgres:postgres@postgres:5432/docprocessor
@@ -41,9 +45,6 @@ services:
       UPLOAD_DIR: /app/uploads
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       CHROMA_DIR: /app/chromadb_data
-    volumes:
-      - uploads:/app/uploads
-      - chromadb_data:/app/chromadb_data
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,6 +55,10 @@ services:
   celery-worker:
     build: ./backend
     command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
+    volumes:
+      - ./backend:/app
+      - uploads:/app/uploads
+      - chromadb_data:/app/chromadb_data
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/docprocessor
       DATABASE_URL_SYNC: postgresql://postgres:postgres@postgres:5432/docprocessor
@@ -63,9 +68,6 @@ services:
       UPLOAD_DIR: /app/uploads
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       CHROMA_DIR: /app/chromadb_data
-    volumes:
-      - uploads:/app/uploads
-      - chromadb_data:/app/chromadb_data
     depends_on:
       postgres:
         condition: service_healthy
@@ -77,6 +79,9 @@ services:
     build: ./frontend
     ports:
       - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - backend
 

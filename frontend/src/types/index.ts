@@ -76,3 +76,11 @@ export interface RAGStatus {
   collections: number;
   total_chunks: number;
 }
+
+export interface ChatSession {
+  id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+  messages?: ChatMessage[];
+}

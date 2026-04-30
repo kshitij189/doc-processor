@@ -2,10 +2,10 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Send, MessageCircle, User, FileText, ChevronDown, ChevronUp,
-  Loader2, Info, Search, FileSignature
+  Loader2, Info, Search, FileSignature, MessageCirclePlus
 } from 'lucide-react';
-import { fetchDocuments, streamChatMessage, fetchRAGStatus } from '../api/client';
-import type { ChatMessage, ChatSource, Document, RAGStatus } from '../types';
+import { fetchDocuments, streamChatMessage, fetchRAGStatus, fetchChatSessions, fetchChatSession } from '../api/client';
+import type { ChatMessage, ChatSource, Document, RAGStatus, ChatSession } from '../types';
 
 // Convert raw logit scores (unbounded) to a 0-100% boundary using the sigmoid function
 const formatLogitAsPercentage = (logit: number): string => {
@@ -20,24 +20,66 @@ const ChatPage: React.FC = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
   const [ragStatus, setRagStatus] = useState<RAGStatus | null>(null);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const [showDocSelector, setShowDocSelector] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const loadSessions = async () => {
+    try {
+      const data = await fetchChatSessions();
+      setSessions(data);
+    } catch (e) {
+      console.error("Failed to load sessions", e);
+    }
+  };
 
   useEffect(() => {
     fetchDocuments({ status: 'completed', page_size: 100 }).then((res) => {
       setDocuments(res.documents);
     });
     fetchRAGStatus().then(setRagStatus).catch(() => {});
+    loadSessions();
   }, []);
+
+  const handleSelectSession = async (sessionId: string) => {
+    setCurrentSessionId(sessionId);
+    setIsLoading(true);
+    setInput('');
+    if (abortRef.current) abortRef.current.abort();
+    try {
+      const sessionData = await fetchChatSession(sessionId);
+      // Map API messages back to frontend format
+      const mappedMessages: ChatMessage[] = (sessionData.messages || []).map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        sources: m.context_docs || [],
+        timestamp: new Date(m.created_at)
+      }));
+      setMessages(mappedMessages);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const startNewChat = () => {
+    setCurrentSessionId(null);
+    setMessages([]);
+    setInput('');
+    if (abortRef.current) abortRef.current.abort();
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const toggleSource = (msgId: string) => {
-    setExpandedSources(prev => {
+    setExpandedSources((prev: Set<string>) => {
       const next = new Set(prev);
       if (next.has(msgId)) next.delete(msgId);
       else next.add(msgId);
@@ -68,14 +110,15 @@ const ChatPage: React.FC = () => {
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMsg, assistantMsg]);
+    setMessages((prev: ChatMessage[]) => [...prev, userMsg, assistantMsg]);
 
     const controller = streamChatMessage(
       question,
       selectedDocIds.length > 0 ? selectedDocIds : undefined,
+      currentSessionId || undefined,
       {
         onToken: (token) => {
-          setMessages(prev =>
+          setMessages((prev: ChatMessage[]) =>
             prev.map(m =>
               m.id === assistantMsgId
                 ? { ...m, content: m.content + token }
@@ -84,7 +127,7 @@ const ChatPage: React.FC = () => {
           );
         },
         onSources: (sources, pipelineInfo) => {
-          setMessages(prev =>
+          setMessages((prev: ChatMessage[]) =>
             prev.map(m =>
               m.id === assistantMsgId
                 ? { ...m, sources: sources as ChatSource[], pipeline_info: pipelineInfo }
@@ -94,9 +137,10 @@ const ChatPage: React.FC = () => {
         },
         onDone: () => {
           setIsLoading(false);
+          loadSessions(); // refresh the sidebar just in case this was a new session title override
         },
         onError: (error) => {
-          setMessages(prev =>
+          setMessages((prev: ChatMessage[]) =>
             prev.map(m =>
               m.id === assistantMsgId
                 ? { ...m, content: `Error: ${error}` }
@@ -109,7 +153,7 @@ const ChatPage: React.FC = () => {
     );
 
     abortRef.current = controller;
-  }, [input, isLoading, selectedDocIds]);
+  }, [input, isLoading, selectedDocIds, currentSessionId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -124,8 +168,32 @@ const ChatPage: React.FC = () => {
   };
 
   return (
-    <div className="chat-page">
-      {/* Header */}
+    <div className="chat-layout">
+      {/* Sidebar for Sessions */}
+      <div className="chat-sidebar">
+        <button className="new-chat-btn" onClick={startNewChat}>
+          <MessageCirclePlus size={18} />
+          New Chat
+        </button>
+        <div className="sessions-list">
+          {sessions.map(s => (
+            <button
+              key={s.id}
+              className={`session-item ${currentSessionId === s.id ? 'active' : ''}`}
+              onClick={() => handleSelectSession(s.id)}
+            >
+              <MessageCircle size={14} className="session-icon" />
+              <span className="session-title">{s.title || 'New Conversation'}</span>
+            </button>
+          ))}
+          {sessions.length === 0 && (
+            <div className="no-sessions">No previous chats</div>
+          )}
+        </div>
+      </div>
+
+      <div className="chat-page">
+        {/* Header */}
       <div className="chat-header">
         <div className="chat-header-left">
           <div className="chat-logo">
@@ -330,6 +398,7 @@ const ChatPage: React.FC = () => {
         <p className="chat-disclaimer">
           AI answers are generated from your document content using RAG pipeline
         </p>
+      </div>
       </div>
     </div>
   );

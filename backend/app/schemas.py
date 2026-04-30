@@ -90,3 +90,38 @@ class ProgressEvent(BaseModel):
 class ExportResponse(BaseModel):
     format: str
     data: list[dict]
+
+
+# --- Chat History Schemas ---
+
+
+class ChatMessageBase(BaseModel):
+    role: str
+    content: str
+    context_docs: list = Field(default_factory=list)
+
+
+class ChatMessageResponse(ChatMessageBase):
+    id: uuid.UUID
+    session_id: uuid.UUID
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ChatSessionBase(BaseModel):
+    title: Optional[str] = None
+
+
+class ChatSessionResponse(ChatSessionBase):
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ChatSessionDetailResponse(ChatSessionResponse):
+    messages: list[ChatMessageResponse] = Field(default_factory=list)
