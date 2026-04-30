@@ -12,17 +12,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navLinks = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/upload', label: 'Upload', icon: Upload },
-    { to: '/chat', label: 'AI Chat', icon: MessageSquare },
+    { to: '/chat', label: 'Chat', icon: MessageSquare },
   ];
 
   return (
     <div className="layout">
       <nav className="navbar">
         <Link to="/" className="navbar-brand">
-          <div className="brand-icon">
-            <FileText size={20} color="white" />
-          </div>
-          DocProcessor
+          <FileText size={24} color="var(--accent-primary)" strokeWidth={2.5} />
+          <span style={{ letterSpacing: '-0.02em' }}>DocProcessor</span>
         </Link>
         <div className="navbar-nav">
           {navLinks.map((link) => (

@@ -3,36 +3,36 @@
    ============================================ */
 
 :root {
-  /* Color Palette — Slate Dark Theme */
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #334155;
-  --bg-card: #1e293b;
-  --bg-card-hover: #263348;
-  --bg-input: #0f172a;
+  /* Color Palette — Human Centric Warm Light Theme */
+  --bg-primary: #faf9f8;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-card-hover: #fafafa;
+  --bg-input: #ffffff;
 
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
   --text-muted: #64748b;
-  --text-inverse: #0f172a;
+  --text-inverse: #ffffff;
 
-  --accent-primary: #6366f1;
-  --accent-primary-hover: #818cf8;
-  --accent-primary-glow: rgba(99, 102, 241, 0.25);
-  --accent-success: #10b981;
-  --accent-success-bg: rgba(16, 185, 129, 0.12);
-  --accent-warning: #f59e0b;
-  --accent-warning-bg: rgba(245, 158, 11, 0.12);
-  --accent-danger: #ef4444;
-  --accent-danger-bg: rgba(239, 68, 68, 0.12);
-  --accent-info: #3b82f6;
-  --accent-info-bg: rgba(59, 130, 246, 0.12);
+  --accent-primary: #4f46e5;
+  --accent-primary-hover: #4338ca;
+  --accent-primary-glow: rgba(79, 70, 229, 0.1);
+  --accent-success: #059669;
+  --accent-success-bg: #ecfdf5;
+  --accent-warning: #d97706;
+  --accent-warning-bg: #fffbeb;
+  --accent-danger: #e11d48;
+  --accent-danger-bg: #fff1f2;
+  --accent-info: #2563eb;
+  --accent-info-bg: #eff6ff;
 
-  --border: #334155;
-  --border-light: #475569;
+  --border: #e2e8f0;
+  --border-light: #f1f5f9;
 
   /* Typography */
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-xs: 0.75rem;
   --font-sm: 0.8125rem;
   --font-base: 0.9375rem;
@@ -53,21 +53,21 @@
   --space-12: 3rem;
 
   /* Radius */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
   --radius-full: 9999px;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
-  --shadow-md: 0 4px 14px rgba(0,0,0,0.35);
-  --shadow-lg: 0 10px 40px rgba(0,0,0,0.4);
-  --shadow-glow: 0 0 20px var(--accent-primary-glow);
+  /* Shadows - Natural and Soft */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.03);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.05), 0 1px 3px rgba(0,0,0,0.03);
+  --shadow-lg: 0 10px 30px rgba(0,0,0,0.08), 0 4px 6px rgba(0,0,0,0.04);
+  --shadow-glow: 0 4px 14px var(--accent-primary-glow);
 
   /* Transitions */
-  --transition: 0.2s ease;
-  --transition-slow: 0.35s ease;
+  --transition: 0.2s ease-out;
+  --transition-slow: 0.35s ease-out;
 }
 
 *, *::before, *::after {
@@ -134,17 +134,6 @@ a:hover {
   text-decoration: none;
 }
 
-.navbar-brand .brand-icon {
-  width: 36px;
-  height: 36px;
-  background: linear-gradient(135deg, var(--accent-primary), #a855f7);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-}
-
 .navbar-nav {
   display: flex;
   align-items: center;
@@ -185,12 +174,9 @@ a:hover {
 
 .page-header h1 {
   font-size: var(--font-2xl);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  background: linear-gradient(135deg, var(--text-primary), var(--accent-primary-hover));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
 }
 
 .page-header p {
@@ -249,12 +235,13 @@ a:hover {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent-primary), #7c3aed);
+  background: var(--accent-primary);
   color: white;
-  box-shadow: 0 2px 8px var(--accent-primary-glow);
+  box-shadow: var(--shadow-sm);
 }
 .btn-primary:hover:not(:disabled) {
-  box-shadow: var(--shadow-glow);
+  background: var(--accent-primary-hover);
+  box-shadow: var(--shadow-md);
   transform: translateY(-1px);
 }
 
@@ -410,7 +397,7 @@ a:hover {
 
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary-hover));
+  background: var(--accent-primary);
   border-radius: var(--radius-full);
   transition: width 0.5s ease;
   position: relative;
@@ -711,11 +698,8 @@ a:hover {
 
 .stat-value {
   font-size: var(--font-2xl);
-  font-weight: 800;
-  background: linear-gradient(135deg, var(--text-primary), var(--accent-primary-hover));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .stat-label {
@@ -941,7 +925,7 @@ a:hover {
 .doc-selector-bar {
   position: relative;
   border-bottom: 1px solid var(--border);
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--bg-tertiary);
 }
 
 .doc-selector-toggle {
@@ -1048,7 +1032,7 @@ a:hover {
   width: 80px;
   height: 80px;
   margin: 0 auto var(--space-4);
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1));
+  background: var(--bg-tertiary);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -1127,9 +1111,9 @@ a:hover {
 }
 
 .assistant .message-avatar {
-  background: linear-gradient(135deg, var(--accent-primary), #a855f7);
+  background: var(--accent-primary);
   color: white;
-  box-shadow: 0 0 15px var(--accent-primary-glow);
+  box-shadow: var(--shadow-sm);
 }
 
 .message-content {
@@ -1154,10 +1138,12 @@ a:hover {
 }
 
 .assistant .message-text {
-  background: rgba(99, 102, 241, 0.05);
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  background: white;
   color: var(--text-primary);
+  border-radius: var(--radius-lg);
   border-top-left-radius: 4px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
 }
 
 .typing-indicator span {
@@ -1317,7 +1303,7 @@ a:hover {
 }
 
 .chat-send-btn {
-  background: linear-gradient(135deg, var(--accent-primary), #a855f7);
+  background: var(--accent-primary);
   color: white;
   border: none;
   width: 40px;
@@ -1330,11 +1316,13 @@ a:hover {
   margin-left: var(--space-2);
   transition: all var(--transition);
   flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
 }
 
 .chat-send-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 2px 10px var(--accent-primary-glow);
+  background: var(--accent-primary-hover);
+  box-shadow: var(--shadow-md);
 }
 
 .chat-send-btn:disabled {

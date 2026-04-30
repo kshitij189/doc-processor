@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Send, Bot, User, Sparkles, FileText, ChevronDown, ChevronUp,
-  Loader2, Zap, Database, Brain, Search
+  Send, MessageCircle, User, FileText, ChevronDown, ChevronUp,
+  Loader2, Info, Search, FileSignature
 } from 'lucide-react';
 import { fetchDocuments, streamChatMessage, fetchRAGStatus } from '../api/client';
 import type { ChatMessage, ChatSource, Document, RAGStatus } from '../types';
@@ -129,8 +129,8 @@ const ChatPage: React.FC = () => {
       <div className="chat-header">
         <div className="chat-header-left">
           <div className="chat-logo">
-            <Brain size={24} />
-            <h1>AI Document Chat</h1>
+            <MessageCircle size={24} />
+            <h1>Document Chat</h1>
           </div>
           <p className="chat-subtitle">Ask questions about your uploaded documents</p>
         </div>
@@ -139,16 +139,16 @@ const ChatPage: React.FC = () => {
           {ragStatus && (
             <div className="rag-stats">
               <span className="stat-pill">
-                <Database size={14} />
+                <FileSignature size={14} />
                 {ragStatus.collections} docs
               </span>
               <span className="stat-pill">
-                <Zap size={14} />
+                <Info size={14} />
                 {ragStatus.total_chunks} chunks
               </span>
               <span className={`stat-pill ${ragStatus.api_key_configured ? 'active' : 'inactive'}`}>
-                <Sparkles size={14} />
-                {ragStatus.api_key_configured ? 'Gemini Ready' : 'No API Key'}
+                <Info size={14} />
+                {ragStatus.api_key_configured ? 'Ready' : 'No API Key'}
               </span>
             </div>
           )}
@@ -211,10 +211,10 @@ const ChatPage: React.FC = () => {
         {messages.length === 0 && (
           <div className="chat-empty">
             <div className="empty-icon">
-              <Sparkles size={48} />
+              <MessageCircle size={48} />
             </div>
             <h2>Ask anything about your documents</h2>
-            <p>I'll search through your uploaded documents using hybrid retrieval, re-ranking, and AI to find the best answer.</p>
+            <p>I'll search through your uploaded documents using advanced retrieval to find the best answer.</p>
             <div className="pipeline-features">
               <div className="feature">
                 <Search size={18} />
@@ -222,13 +222,13 @@ const ChatPage: React.FC = () => {
                 <small>Semantic + BM25</small>
               </div>
               <div className="feature">
-                <Zap size={18} />
+                <FileSignature size={18} />
                 <span>Re-Ranking</span>
                 <small>Cross-encoder</small>
               </div>
               <div className="feature">
-                <Brain size={18} />
-                <span>Gemini AI</span>
+                <Info size={18} />
+                <span>Assistant</span>
                 <small>Streaming</small>
               </div>
             </div>
@@ -238,7 +238,7 @@ const ChatPage: React.FC = () => {
         {messages.map((msg) => (
           <div key={msg.id} className={`chat-message ${msg.role}`}>
             <div className="message-avatar">
-              {msg.role === 'user' ? <User size={18} /> : <Bot size={18} />}
+              {msg.role === 'user' ? <User size={18} /> : <MessageCircle size={18} />}
             </div>
             <div className="message-content">
               <div className="message-text">
