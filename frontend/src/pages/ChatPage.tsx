@@ -43,6 +43,15 @@ const ChatPage: React.FC = () => {
     });
     fetchRAGStatus().then(setRagStatus).catch(() => {});
     loadSessions();
+
+    // Force scroll to top on mount with a slight delay to override browser restoration
+    const timer = setTimeout(() => {
+      window.scrollTo(0, 0);
+      document.body.scrollTo(0, 0);
+      const mainContent = document.querySelector('.main-content');
+      if (mainContent) mainContent.scrollTo(0, 0);
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleSelectSession = async (sessionId: string) => {
@@ -389,6 +398,7 @@ const ChatPage: React.FC = () => {
             placeholder="Ask a question about your documents..."
             rows={1}
             disabled={isLoading}
+            autoFocus={false}
           />
           <button
             className="chat-send-btn"
