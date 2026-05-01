@@ -1345,10 +1345,15 @@ a:hover {
 /* Sidebar Chat Layout */
 .chat-layout {
   display: flex;
-  height: 100vh;
-  width: 100vw;
+  height: calc(100vh - 140px);
+  width: 100%;
+  max-width: 1300px;
+  margin: 0 auto;
   overflow: hidden;
-  background: var(--bg-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .chat-sidebar {

@@ -25,6 +25,7 @@ const ChatPage: React.FC = () => {
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const [showDocSelector, setShowDocSelector] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const loadSessions = async () => {
@@ -75,8 +76,8 @@ const ChatPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (messages.length > 0) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messages.length > 0 && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
   }, [messages]);
 
@@ -277,7 +278,7 @@ const ChatPage: React.FC = () => {
       </div>
 
       {/* Messages */}
-      <div className="chat-messages">
+      <div className="chat-messages" ref={scrollContainerRef}>
         {messages.length === 0 && (
           <div className="chat-empty">
             <div className="empty-icon">
