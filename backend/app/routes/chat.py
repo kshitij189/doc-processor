@@ -14,7 +14,7 @@ from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.database import get_db
+from app.database import get_db, async_session_factory
 from app.models import ChatSession, ChatMessage
 from app.services import rag_service
 from app.schemas import ChatSessionResponse, ChatSessionDetailResponse
@@ -150,24 +150,28 @@ async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             }
 
         if request.session_id:
-            assistant_msg = ChatMessage(
-                session_id=request.session_id, 
-                role="assistant", 
-                content="".join(full_answer),
-                context_docs=sources
-            )
-            db.add(assistant_msg)
-            
-            session_result = await db.execute(select(ChatSession).where(ChatSession.id == request.session_id))
-            session = session_result.scalars().first()
-            if session and session.title == "New Conversation":
-                session.title = request.question[:50]
+            # Finalize session and save message using a NEW DB session
+            # since the request's original 'db' session is closed when chat_stream returns.
+            async with async_session_factory() as session:
+                assistant_msg = ChatMessage(
+                    session_id=request.session_id, 
+                    role="assistant", 
+                    content="".join(full_answer),
+                    context_docs=sources
+                )
+                session.add(assistant_msg)
                 
-            try:
-                await db.commit()
-            except Exception as e:
-                logger.error("Error saving assistant message: %s", e)
-                await db.rollback()
+                # Update session title if it's new
+                sess_result = await session.execute(select(ChatSession).where(ChatSession.id == request.session_id))
+                chat_sess = sess_result.scalars().first()
+                if chat_sess and chat_sess.title == "New Conversation":
+                    chat_sess.title = request.question[:50]
+                    
+                try:
+                    await session.commit()
+                except Exception as e:
+                    logger.error("Error saving assistant message in stream: %s", e)
+                    await session.rollback()
 
         yield {
             "event": "done",
