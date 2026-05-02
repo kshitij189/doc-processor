@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.models import Document, DocumentStatus, ProcessingResult
 from app.worker.tasks import process_document
-from app.services import rag_service
+from app.services.rag_service import delete_document_index
 
 
 async def delete_document(session: AsyncSession, document_id: uuid.UUID) -> bool:
@@ -29,7 +29,7 @@ async def delete_document(session: AsyncSession, document_id: uuid.UUID) -> bool
 
     # 1. Remove from RAG Index
     try:
-        rag_service.delete_document_index(str(doc.id))
+        delete_document_index(str(doc.id))
     except Exception:
         pass # Logging is already in the service
 

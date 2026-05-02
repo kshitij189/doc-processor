@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Search, FileText, Clock, ChevronLeft, ChevronRight, ArrowUpDown, Download, Trash2 } from 'lucide-react';
 import { useDocuments } from '../hooks/useDocuments';
 import StatusBadge from '../components/StatusBadge';
-import { getBulkExportUrl, apiClient } from '../api/client';
+import { getBulkExportUrl, api } from '../api/client';
 
 const DashboardPage: React.FC = () => {
   const {
@@ -14,7 +14,7 @@ const DashboardPage: React.FC = () => {
     sortOrder, setSortOrder,
     page, setPage,
     pageSize,
-    refreshDocuments
+    refresh
   } = useDocuments();
 
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
@@ -25,8 +25,8 @@ const DashboardPage: React.FC = () => {
     
     if (deletingId === id) {
       try {
-        await apiClient.delete(`/api/documents/${id}`);
-        refreshDocuments();
+        await api.delete(`/documents/${id}`);
+        refresh();
       } catch (err) {
         console.error('Failed to delete document:', err);
       } finally {
