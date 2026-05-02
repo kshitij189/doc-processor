@@ -561,6 +561,7 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  position: relative;
 }
 
 .doc-card-header {
