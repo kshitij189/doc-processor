@@ -13,6 +13,37 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.models import Document, DocumentStatus, ProcessingResult
 from app.worker.tasks import process_document
+from app.services import rag_service
+
+
+async def delete_document(session: AsyncSession, document_id: uuid.UUID) -> bool:
+    """
+    Completely delete a document:
+    1. Remove from ChromaDB (RAG index)
+    2. Delete from disk
+    3. Delete from PostgreSQL
+    """
+    doc = await get_document_by_id(session, document_id)
+    if not doc:
+        return False
+
+    # 1. Remove from RAG Index
+    try:
+        rag_service.delete_document_index(str(doc.id))
+    except Exception:
+        pass # Logging is already in the service
+
+    # 2. Delete from Disk
+    try:
+        if os.path.exists(doc.file_path):
+            os.remove(doc.file_path)
+    except Exception:
+        pass
+
+    # 3. Delete from PostgreSQL (Cascading should handle ProcessingResult)
+    await session.delete(doc)
+    await session.flush()
+    return True
 
 
 async def create_document(

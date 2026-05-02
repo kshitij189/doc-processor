@@ -1,9 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Search, FileText, Clock, ChevronLeft, ChevronRight, ArrowUpDown, Download } from 'lucide-react';
+import { Search, FileText, Clock, ChevronLeft, ChevronRight, ArrowUpDown, Download, Trash2 } from 'lucide-react';
 import { useDocuments } from '../hooks/useDocuments';
 import StatusBadge from '../components/StatusBadge';
-import { getBulkExportUrl } from '../api/client';
+import { getBulkExportUrl, apiClient } from '../api/client';
 
 const DashboardPage: React.FC = () => {
   const {
@@ -14,7 +14,30 @@ const DashboardPage: React.FC = () => {
     sortOrder, setSortOrder,
     page, setPage,
     pageSize,
+    refreshDocuments
   } = useDocuments();
+
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
+
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (deletingId === id) {
+      try {
+        await apiClient.delete(`/api/documents/${id}`);
+        refreshDocuments();
+      } catch (err) {
+        console.error('Failed to delete document:', err);
+      } finally {
+        setDeletingId(null);
+      }
+    } else {
+      setDeletingId(id);
+      // Reset after 3 seconds
+      setTimeout(() => setDeletingId(null), 3000);
+    }
+  };
 
   const totalPages = Math.ceil(total / pageSize);
 
@@ -188,6 +211,31 @@ const DashboardPage: React.FC = () => {
                       ⚠ {doc.error_message.substring(0, 80)}...
                     </div>
                   )}
+                  
+                  {/* Delete Action Overlay */}
+                  <div 
+                    className="doc-card-actions" 
+                    onClick={(e) => handleDelete(doc.id, e)}
+                    style={{
+                      position: 'absolute',
+                      top: '12px',
+                      right: '12px',
+                      padding: '8px',
+                      borderRadius: '8px',
+                      background: deletingId === doc.id ? 'var(--accent-danger)' : 'rgba(255,255,255,0.05)',
+                      color: deletingId === doc.id ? 'white' : 'var(--text-muted)',
+                      transition: 'all 0.2s ease',
+                      zIndex: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: 'var(--font-xs)',
+                      fontWeight: 600,
+                      backdropFilter: 'blur(4px)',
+                    }}
+                  >
+                    {deletingId === doc.id ? 'Confirm?' : <Trash2 size={16} />}
+                  </div>
                 </div>
               </Link>
             ))}

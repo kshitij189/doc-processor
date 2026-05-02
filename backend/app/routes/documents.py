@@ -202,3 +202,17 @@ async def export_document(
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.delete("/{document_id}", status_code=204)
+async def delete_document(
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a document completely from DB, disk, and RAG index."""
+    success = await document_service.delete_document(db, document_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    await db.commit()
+    return Response(status_code=204)

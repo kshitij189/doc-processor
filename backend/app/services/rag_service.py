@@ -696,3 +696,15 @@ def get_rag_status() -> dict:
         pass
 
     return status
+
+
+def delete_document_index(document_id: str):
+    """Delete the collection for a specific document from ChromaDB."""
+    try:
+        chroma = _get_chroma()
+        collection_name = f"doc_{document_id.replace('-', '_')}"
+        chroma.delete_collection(name=collection_name)
+        logger.info("Deleted ChromaDB collection: %s", collection_name)
+    except Exception as e:
+        # If collection doesn't exist, it's fine
+        logger.warning("Failed to delete ChromaDB collection for %s: %s", document_id, e)
