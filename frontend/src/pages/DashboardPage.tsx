@@ -262,7 +262,7 @@ const DashboardPage: React.FC = () => {
                     title="Delete document"
                     style={{
                       position: 'absolute',
-                      top: '12px',
+                      bottom: '12px',
                       right: '12px',
                       padding: '8px',
                       borderRadius: '8px',
