@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, RefreshCw, CheckCircle, Download, Save,
-  FileText, Clock, HardDrive, Tag
+  FileText, Clock, HardDrive, Tag, Trash2, AlertTriangle
 } from 'lucide-react';
-import { fetchDocument, retryDocument, updateResult, finalizeDocument, getExportUrl } from '../api/client';
+import { fetchDocument, retryDocument, updateResult, finalizeDocument, getExportUrl, deleteDocument } from '../api/client';
 import { useSSE } from '../hooks/useSSE';
 import StatusBadge from '../components/StatusBadge';
 import ProgressBar from '../components/ProgressBar';
@@ -12,11 +12,15 @@ import type { Document } from '../types';
 
 const DocumentDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [doc, setDoc] = useState<Document | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Edit form state
   const [editTitle, setEditTitle] = useState('');
@@ -100,6 +104,19 @@ const DocumentDetailPage: React.FC = () => {
       setActionMsg('Document finalized successfully');
     } catch (err: any) {
       setActionMsg(`Finalize failed: ${err.response?.data?.detail || err.message}`);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!id) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteDocument(id);
+      navigate('/', { replace: true });
+    } catch (err: any) {
+      setDeleteError(err.response?.data?.detail || err.message || 'Failed to delete document');
+      setIsDeleting(false);
     }
   };
 
@@ -346,10 +363,133 @@ const DocumentDetailPage: React.FC = () => {
                 </a>
               </>
             )}
+
+            {/* Delete */}
+            <button
+              className="btn btn-danger-outline"
+              onClick={() => { setShowDeleteModal(true); setDeleteError(null); }}
+              style={{
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: 'var(--accent-danger)',
+                gap: 'var(--space-2)',
+              }}
+            >
+              <Trash2 size={16} /> Delete Document
+            </button>
           </div>
         </div>
       </div>
     </div>
+
+    {/* Delete Confirmation Modal */}
+    {showDeleteModal && (
+      <div className="modal-overlay" onClick={() => !isDeleting && setShowDeleteModal(false)} style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0, 0, 0, 0.6)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        animation: 'fadeIn 0.2s ease',
+      }}>
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-xl)',
+            padding: 'var(--space-6)',
+            maxWidth: '460px',
+            width: '90%',
+            animation: 'slideUp 0.25s ease',
+          }}
+        >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '56px',
+            height: '56px',
+            borderRadius: '50%',
+            background: 'rgba(239, 68, 68, 0.12)',
+            margin: '0 auto var(--space-4)',
+          }}>
+            <AlertTriangle size={28} style={{ color: 'var(--accent-danger)' }} />
+          </div>
+
+          <h2 style={{
+            fontSize: 'var(--font-lg)',
+            fontWeight: 700,
+            textAlign: 'center',
+            marginBottom: 'var(--space-2)',
+            color: 'var(--text-primary)',
+          }}>
+            Delete Document
+          </h2>
+
+          <p style={{
+            textAlign: 'center',
+            color: 'var(--text-secondary)',
+            fontSize: 'var(--font-sm)',
+            marginBottom: 'var(--space-4)',
+            lineHeight: 1.6,
+          }}>
+            Are you sure you want to delete <strong style={{ color: 'var(--text-primary)' }}>"{doc.filename}"</strong>?
+          </p>
+
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.06)',
+            border: '1px solid rgba(239, 68, 68, 0.15)',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-3) var(--space-4)',
+            marginBottom: 'var(--space-5)',
+            fontSize: 'var(--font-xs)',
+            color: 'var(--text-secondary)',
+            lineHeight: 1.8,
+          }}>
+            <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--accent-danger)' }}>
+              This will permanently remove:
+            </div>
+            <div>• All chunks from the <strong>RAG vector index</strong></div>
+            <div>• The uploaded <strong>file from disk</strong></div>
+            <div>• All <strong>processing results & metadata</strong></div>
+          </div>
+
+          {deleteError && (
+            <div className="alert alert-error" style={{ marginBottom: 'var(--space-4)', fontSize: 'var(--font-xs)' }}>
+              {deleteError}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end' }}>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowDeleteModal(false)}
+              disabled={isDeleting}
+              style={{ flex: 1 }}
+            >
+              Cancel
+            </button>
+            <button
+              className="btn btn-danger"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              style={{
+                flex: 1,
+                opacity: isDeleting ? 0.7 : 1,
+              }}
+            >
+              <Trash2 size={14} />
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
   );
 };
 

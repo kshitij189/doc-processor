@@ -58,6 +58,10 @@ export function getExportUrl(id: string, format: 'json' | 'csv'): string {
   return `${API_BASE}/documents/${id}/export?format=${format}`;
 }
 
+export async function deleteDocument(id: string): Promise<void> {
+  await api.delete(`/documents/${id}`);
+}
+
 export function getBulkExportUrl(format: 'json' | 'csv', finalizedOnly = true): string {
   return `${API_BASE}/documents/export/bulk?format=${format}&finalized_only=${finalizedOnly}`;
 }

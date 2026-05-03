@@ -699,12 +699,39 @@ def get_rag_status() -> dict:
 
 
 def delete_document_index(document_id: str):
-    """Delete the collection for a specific document from ChromaDB."""
+    """Delete the collection for a specific document from ChromaDB and clean up Redis caches."""
     try:
         chroma = _get_chroma()
         collection_name = f"doc_{document_id.replace('-', '_')}"
+
+        # 1. Clear embedding cache for this document's chunks from Redis
+        try:
+            collection = chroma.get_collection(collection_name)
+            data = collection.get(include=["documents"])
+            if data and data["documents"]:
+                r = _get_redis()
+                for doc_text in data["documents"]:
+                    key = _cache_key(doc_text)
+                    r.delete(key)
+                logger.info("Cleared %d embedding cache entries from Redis for document %s",
+                            len(data["documents"]), document_id)
+        except Exception as e:
+            logger.warning("Failed to clear embedding cache for %s: %s", document_id, e)
+
+        # 2. Delete the ChromaDB collection
         chroma.delete_collection(name=collection_name)
         logger.info("Deleted ChromaDB collection: %s", collection_name)
+
+        # 3. Flush any Q&A cache entries referencing this document
+        try:
+            r = _get_redis()
+            for key in r.scan_iter("qa:*"):
+                r.delete(key)
+            logger.info("Flushed Q&A cache after deleting document %s", document_id)
+        except Exception as e:
+            logger.warning("Failed to flush Q&A cache: %s", e)
+
     except Exception as e:
         # If collection doesn't exist, it's fine
         logger.warning("Failed to delete ChromaDB collection for %s: %s", document_id, e)
+

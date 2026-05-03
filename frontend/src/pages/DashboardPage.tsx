@@ -1,9 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Search, FileText, Clock, ChevronLeft, ChevronRight, ArrowUpDown, Download, Trash2 } from 'lucide-react';
+import { Search, FileText, Clock, ChevronLeft, ChevronRight, ArrowUpDown, Download, Trash2, AlertTriangle, X } from 'lucide-react';
 import { useDocuments } from '../hooks/useDocuments';
 import StatusBadge from '../components/StatusBadge';
-import { getBulkExportUrl, api } from '../api/client';
+import { getBulkExportUrl, deleteDocument } from '../api/client';
 
 const DashboardPage: React.FC = () => {
   const {
@@ -17,25 +17,39 @@ const DashboardPage: React.FC = () => {
     refresh
   } = useDocuments();
 
-  const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<{ id: string; filename: string } | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = React.useState<string | null>(null);
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const openDeleteModal = (id: string, filename: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (deletingId === id) {
-      try {
-        await api.delete(`/documents/${id}`);
-        refresh();
-      } catch (err) {
-        console.error('Failed to delete document:', err);
-      } finally {
-        setDeletingId(null);
-      }
-    } else {
-      setDeletingId(id);
-      // Reset after 3 seconds
-      setTimeout(() => setDeletingId(null), 3000);
+    setDeleteTarget({ id, filename });
+    setDeleteError(null);
+  };
+
+  const closeDeleteModal = () => {
+    if (deleting) return;
+    setDeleteTarget(null);
+    setDeleteError(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteDocument(deleteTarget.id);
+      setDeleteSuccess(`"${deleteTarget.filename}" has been deleted and removed from the RAG index.`);
+      setDeleteTarget(null);
+      refresh();
+      // Auto-clear success message
+      setTimeout(() => setDeleteSuccess(null), 5000);
+    } catch (err: any) {
+      setDeleteError(err.response?.data?.detail || err.message || 'Failed to delete document');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -91,6 +105,35 @@ const DashboardPage: React.FC = () => {
           </a>
         </div>
       </div>
+
+      {/* Success Toast */}
+      {deleteSuccess && (
+        <div className="delete-toast" style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-3)',
+          padding: 'var(--space-3) var(--space-4)',
+          marginBottom: 'var(--space-4)',
+          background: 'rgba(16, 185, 129, 0.12)',
+          border: '1px solid rgba(16, 185, 129, 0.3)',
+          borderRadius: 'var(--radius-lg)',
+          color: 'var(--accent-success)',
+          fontSize: 'var(--font-sm)',
+          fontWeight: 500,
+          animation: 'fadeIn 0.3s ease',
+        }}>
+          <span style={{ flex: 1 }}>{deleteSuccess}</span>
+          <button
+            onClick={() => setDeleteSuccess(null)}
+            style={{
+              background: 'none', border: 'none', color: 'inherit',
+              cursor: 'pointer', padding: '4px', display: 'flex',
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Stats Row */}
       <div className="stats-row">
@@ -212,18 +255,19 @@ const DashboardPage: React.FC = () => {
                     </div>
                   )}
                   
-                  {/* Delete Action Overlay */}
+                  {/* Delete Button */}
                   <div 
-                    className="doc-card-actions" 
-                    onClick={(e) => handleDelete(doc.id, e)}
+                    className="doc-card-delete-btn"
+                    onClick={(e) => openDeleteModal(doc.id, doc.filename, e)}
+                    title="Delete document"
                     style={{
                       position: 'absolute',
                       top: '12px',
                       right: '12px',
                       padding: '8px',
                       borderRadius: '8px',
-                      background: deletingId === doc.id ? 'var(--accent-danger)' : 'rgba(255,255,255,0.05)',
-                      color: deletingId === doc.id ? 'white' : 'var(--text-muted)',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: 'var(--text-muted)',
                       transition: 'all 0.2s ease',
                       zIndex: 10,
                       display: 'flex',
@@ -232,9 +276,10 @@ const DashboardPage: React.FC = () => {
                       fontSize: 'var(--font-xs)',
                       fontWeight: 600,
                       backdropFilter: 'blur(4px)',
+                      cursor: 'pointer',
                     }}
                   >
-                    {deletingId === doc.id ? 'Confirm?' : <Trash2 size={16} />}
+                    <Trash2 size={16} />
                   </div>
                 </div>
               </Link>
@@ -263,6 +308,119 @@ const DashboardPage: React.FC = () => {
             </div>
           )}
         </>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={closeDeleteModal} style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          animation: 'fadeIn 0.2s ease',
+        }}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-xl)',
+              padding: 'var(--space-6)',
+              maxWidth: '460px',
+              width: '90%',
+              animation: 'slideUp 0.25s ease',
+            }}
+          >
+            {/* Warning Icon */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              background: 'rgba(239, 68, 68, 0.12)',
+              margin: '0 auto var(--space-4)',
+            }}>
+              <AlertTriangle size={28} style={{ color: 'var(--accent-danger)' }} />
+            </div>
+
+            <h2 style={{
+              fontSize: 'var(--font-lg)',
+              fontWeight: 700,
+              textAlign: 'center',
+              marginBottom: 'var(--space-2)',
+              color: 'var(--text-primary)',
+            }}>
+              Delete Document
+            </h2>
+
+            <p style={{
+              textAlign: 'center',
+              color: 'var(--text-secondary)',
+              fontSize: 'var(--font-sm)',
+              marginBottom: 'var(--space-4)',
+              lineHeight: 1.6,
+            }}>
+              Are you sure you want to delete <strong style={{ color: 'var(--text-primary)' }}>"{deleteTarget.filename}"</strong>?
+            </p>
+
+            {/* What will be removed */}
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.06)',
+              border: '1px solid rgba(239, 68, 68, 0.15)',
+              borderRadius: 'var(--radius-md)',
+              padding: 'var(--space-3) var(--space-4)',
+              marginBottom: 'var(--space-5)',
+              fontSize: 'var(--font-xs)',
+              color: 'var(--text-secondary)',
+              lineHeight: 1.8,
+            }}>
+              <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--accent-danger)' }}>
+                This will permanently remove:
+              </div>
+              <div>• All chunks from the <strong>RAG vector index</strong></div>
+              <div>• The uploaded <strong>file from disk</strong></div>
+              <div>• All <strong>processing results & metadata</strong></div>
+            </div>
+
+            {deleteError && (
+              <div className="alert alert-error" style={{ marginBottom: 'var(--space-4)', fontSize: 'var(--font-xs)' }}>
+                {deleteError}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={closeDeleteModal}
+                disabled={deleting}
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                style={{
+                  flex: 1,
+                  background: deleting ? 'var(--accent-danger)' : undefined,
+                  opacity: deleting ? 0.7 : 1,
+                }}
+              >
+                <Trash2 size={14} />
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
