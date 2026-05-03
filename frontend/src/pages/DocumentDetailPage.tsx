@@ -147,6 +147,7 @@ const DocumentDetailPage: React.FC = () => {
   }
 
   return (
+    <>
     <div>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
@@ -489,7 +490,7 @@ const DocumentDetailPage: React.FC = () => {
         </div>
       </div>
     )}
-  </div>
+    </>
   );
 };
 
