@@ -24,27 +24,29 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <FileText size={24} color="var(--accent-primary)" strokeWidth={2.5} />
           <span style={{ letterSpacing: '-0.02em' }}>DocProcessor</span>
         </Link>
-        <div className="navbar-nav">
-          {navLinks.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={`nav-link ${location.pathname === link.to ? 'active' : ''}`}
-            >
-              <link.icon size={16} />
-              {link.label}
-            </Link>
-          ))}
-        </div>
-        {user && (
-          <div className="navbar-user">
-            <span className="navbar-user-email">{user.name || user.email}</span>
-            <button className="btn btn-secondary btn-sm" onClick={logout} title="Sign out">
-              <LogOut size={14} />
-              Logout
-            </button>
+        <div className="navbar-right">
+          <div className="navbar-nav">
+            {navLinks.map((link) => (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={`nav-link ${location.pathname === link.to ? 'active' : ''}`}
+              >
+                <link.icon size={16} />
+                {link.label}
+              </Link>
+            ))}
           </div>
-        )}
+          {user && (
+            <div className="navbar-user">
+              <span className="navbar-user-email">{user.name || user.email}</span>
+              <button className="btn btn-secondary btn-sm" onClick={logout} title="Sign out">
+                <LogOut size={14} />
+                Logout
+              </button>
+            </div>
+          )}
+        </div>
       </nav>
       <main className="main-content">{children}</main>
     </div>
