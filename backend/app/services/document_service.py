@@ -52,6 +52,7 @@ async def create_document(
     file_path: str,
     file_type: str,
     file_size: int,
+    user_id: uuid.UUID | None = None,
 ) -> Document:
     """Create a document record and dispatch Celery processing task."""
     doc = Document(
@@ -61,6 +62,7 @@ async def create_document(
         file_type=file_type,
         file_size=file_size,
         status=DocumentStatus.QUEUED,
+        user_id=user_id,
     )
     session.add(doc)
     await session.flush()
@@ -88,10 +90,16 @@ async def get_documents(
     sort_order: str = "desc",
     page: int = 1,
     page_size: int = 20,
+    user_id: uuid.UUID | None = None,
 ) -> tuple[list[Document], int]:
     """List documents with filtering, search, sorting, and pagination."""
     query = select(Document).options(selectinload(Document.result))
     count_query = select(func.count(Document.id))
+
+    # Filter by user
+    if user_id:
+        query = query.where(Document.user_id == user_id)
+        count_query = count_query.where(Document.user_id == user_id)
 
     # Search by filename
     if search:

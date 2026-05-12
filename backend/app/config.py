@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
 
+    # --- Auth / JWT ---
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "docprocessor-super-secret-key-change-in-production")
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRY_HOURS: int = 24
+
     class Config:
         env_file = ".env"
 

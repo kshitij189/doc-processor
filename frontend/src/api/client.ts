@@ -8,6 +8,33 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// --- Auth Interceptors ---
+
+// Attach JWT token to every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('dp_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Redirect to login on 401 (but not for auth endpoints themselves)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (
+      error.response?.status === 401 &&
+      !error.config?.url?.includes('/auth/')
+    ) {
+      localStorage.removeItem('dp_token');
+      localStorage.removeItem('dp_user');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
 // --- Documents ---
 
 export async function uploadDocuments(files: File[]): Promise<UploadResponse> {
@@ -118,9 +145,15 @@ export function streamChatMessage(
 ): AbortController {
   const controller = new AbortController();
 
+  const token = localStorage.getItem('dp_token');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   fetch(`${API_BASE}/chat/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ question, document_ids: documentIds, session_id: sessionId }),
     signal: controller.signal,
   })

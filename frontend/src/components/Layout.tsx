@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Upload, FileText, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Upload, FileText, MessageSquare, LogOut } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -8,6 +9,7 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   const navLinks = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -34,6 +36,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </Link>
           ))}
         </div>
+        {user && (
+          <div className="navbar-user">
+            <span className="navbar-user-email">{user.name || user.email}</span>
+            <button className="btn btn-secondary btn-sm" onClick={logout} title="Sign out">
+              <LogOut size={14} />
+              Logout
+            </button>
+          </div>
+        )}
       </nav>
       <main className="main-content">{children}</main>
     </div>

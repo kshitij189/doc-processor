@@ -19,6 +19,8 @@ from app.schemas import (
     UploadResponse,
 )
 from app.services import document_service, export_service
+from app.services.auth_service import get_current_user
+from app.models import User
 
 router = APIRouter(prefix="/api/documents", tags=["Documents"])
 
@@ -27,6 +29,7 @@ router = APIRouter(prefix="/api/documents", tags=["Documents"])
 async def upload_documents(
     files: list[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Upload one or more documents for processing."""
     if not files:
@@ -60,6 +63,7 @@ async def upload_documents(
             file_path=file_path,
             file_type=file.content_type or "application/octet-stream",
             file_size=len(contents),
+            user_id=current_user.id,
         )
         uploaded_docs.append(doc)
 
@@ -78,6 +82,7 @@ async def list_documents(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """List documents with search, filter, sort, and pagination."""
     documents, total = await document_service.get_documents(
@@ -88,6 +93,7 @@ async def list_documents(
         sort_order=sort_order,
         page=page,
         page_size=page_size,
+        user_id=current_user.id,
     )
     return DocumentListResponse(
         documents=[DocumentResponse.model_validate(doc) for doc in documents],
@@ -104,6 +110,7 @@ async def export_all_documents(
     format: str = Query("json", description="Export format: json or csv"),
     finalized_only: bool = Query(True, description="Export finalized only"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Bulk export all finalized documents."""
     if format not in ("json", "csv"):
@@ -124,10 +131,11 @@ async def export_all_documents(
 async def get_document(
     document_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get document details with processing result."""
     doc = await document_service.get_document_by_id(db, document_id)
-    if not doc:
+    if not doc or doc.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Document not found")
     return DocumentResponse.model_validate(doc)
 
@@ -136,8 +144,12 @@ async def get_document(
 async def retry_document(
     document_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Retry processing of a failed document."""
+    doc = await document_service.get_document_by_id(db, document_id)
+    if not doc or doc.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Document not found")
     try:
         doc = await document_service.retry_document(db, document_id)
         if not doc:
@@ -152,8 +164,13 @@ async def update_document_result(
     document_id: uuid.UUID,
     updates: ProcessingResultUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Edit/update the processing result for a document."""
+    doc = await document_service.get_document_by_id(db, document_id)
+    if not doc or doc.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
     result = await document_service.update_result(
         db, document_id, updates.model_dump(exclude_unset=True)
     )
@@ -169,8 +186,12 @@ async def update_document_result(
 async def finalize_document(
     document_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Mark a completed document as finalized."""
+    doc = await document_service.get_document_by_id(db, document_id)
+    if not doc or doc.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Document not found")
     try:
         doc = await document_service.finalize_document(db, document_id)
         if not doc:
@@ -185,10 +206,15 @@ async def export_document(
     document_id: uuid.UUID,
     format: str = Query("json", description="Export format: json or csv"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Export a single document's finalized result."""
     if format not in ("json", "csv"):
         raise HTTPException(status_code=400, detail="Format must be 'json' or 'csv'")
+
+    doc = await document_service.get_document_by_id(db, document_id)
+    if not doc or doc.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Document not found")
 
     data = await export_service.export_document(db, document_id, format)
     if data is None:
@@ -208,6 +234,7 @@ async def export_document(
 async def delete_document(
     document_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Delete a document completely from DB, disk, and RAG index."""
     success = await document_service.delete_document(db, document_id)

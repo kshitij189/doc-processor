@@ -125,3 +125,33 @@ class ChatSessionResponse(ChatSessionBase):
 
 class ChatSessionDetailResponse(ChatSessionResponse):
     messages: list[ChatMessageResponse] = Field(default_factory=list)
+
+
+# --- Auth Schemas ---
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: "UserResponse"
+
+
+class UserResponse(BaseModel):
+    id: uuid.UUID
+    email: str
+    name: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

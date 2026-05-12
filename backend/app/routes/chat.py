@@ -15,9 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.database import get_db, async_session_factory
-from app.models import ChatSession, ChatMessage
+from app.models import ChatSession, ChatMessage, User
 from app.services import rag_service
 from app.schemas import ChatSessionResponse, ChatSessionDetailResponse
+from app.services.auth_service import get_current_user
 
 logger = logging.getLogger("chat_api")
 
@@ -41,20 +42,20 @@ class CreateSessionRequest(BaseModel):
     title: str = "New Conversation"
 
 @router.post("/sessions", response_model=ChatSessionResponse)
-async def create_session(request: CreateSessionRequest, db: AsyncSession = Depends(get_db)):
-    session = ChatSession(title=request.title)
+async def create_session(request: CreateSessionRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    session = ChatSession(title=request.title, user_id=current_user.id)
     db.add(session)
     await db.commit()
     await db.refresh(session)
     return session
 
 @router.get("/sessions", response_model=list[ChatSessionResponse])
-async def list_sessions(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ChatSession).order_by(ChatSession.updated_at.desc()))
+async def list_sessions(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(select(ChatSession).where(ChatSession.user_id == current_user.id).order_by(ChatSession.updated_at.desc()))
     return result.scalars().all()
 
 @router.get("/sessions/{session_id}", response_model=ChatSessionDetailResponse)
-async def get_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     # Fetch session
     result = await db.execute(select(ChatSession).where(ChatSession.id == session_id))
     session = result.scalars().first()
@@ -72,7 +73,7 @@ async def get_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db))
 # --- Chat Execution ---
 
 @router.post("", response_model=ChatResponse)
-async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     history_dicts = None
     if request.session_id:
         msg_result = await db.execute(select(ChatMessage).where(ChatMessage.session_id == request.session_id).order_by(ChatMessage.created_at.asc()))
@@ -113,7 +114,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/stream")
-async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     history_dicts = None
     if request.session_id:
         msg_result = await db.execute(select(ChatMessage).where(ChatMessage.session_id == request.session_id).order_by(ChatMessage.created_at.asc()))
@@ -182,7 +183,7 @@ async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/status")
-async def chat_status():
+async def chat_status(current_user: User = Depends(get_current_user)):
     status = rag_service.get_rag_status()
     return status
 

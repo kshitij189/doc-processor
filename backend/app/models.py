@@ -30,6 +30,20 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    name = Column(String(255), nullable=True)
+    hashed_password = Column(String(512), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    # Relationships
+    documents = relationship("Document", back_populates="owner")
+    chat_sessions = relationship("ChatSession", back_populates="owner")
+
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -44,6 +58,7 @@ class Document(Base):
         default=DocumentStatus.QUEUED,
     )
     is_finalized = Column(Boolean, default=False, nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     celery_task_id = Column(String(255), nullable=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -51,13 +66,14 @@ class Document(Base):
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
 
-    # Relationship
+    # Relationships
     result = relationship(
         "ProcessingResult",
         back_populates="document",
         uselist=False,
         cascade="all, delete-orphan",
     )
+    owner = relationship("User", back_populates="documents")
 
     __table_args__ = (
         Index("ix_documents_status", "status"),
@@ -96,10 +112,12 @@ class ChatSession(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     title = Column(String(255), nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan", order_by="ChatMessage.created_at")
+    owner = relationship("User", back_populates="chat_sessions")
 
 
 class ChatMessage(Base):

@@ -84,3 +84,18 @@ export interface ChatSession {
   updated_at: string;
   messages?: ChatMessage[];
 }
+
+// --- Auth Types ---
+
+export interface User {
+  id: string;
+  email: string;
+  name: string | null;
+  created_at: string;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
