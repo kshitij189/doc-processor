@@ -4,7 +4,7 @@ import {
   Send, MessageCircle, User, FileText, ChevronDown, ChevronUp,
   Loader2, Info, Search, FileSignature, MessageCirclePlus
 } from 'lucide-react';
-import { fetchDocuments, streamChatMessage, fetchRAGStatus, fetchChatSessions, fetchChatSession } from '../api/client';
+import { fetchDocuments, streamChatMessage, fetchRAGStatus, fetchChatSessions, fetchChatSession, createChatSession } from '../api/client';
 import type { ChatMessage, ChatSource, Document, RAGStatus, ChatSession } from '../types';
 
 // Convert raw logit scores (unbounded) to a 0-100% boundary using the sigmoid function
@@ -107,6 +107,17 @@ const ChatPage: React.FC = () => {
     setInput('');
     setIsLoading(true);
 
+    let activeSessionId = currentSessionId;
+    if (!activeSessionId) {
+      try {
+        const newSession = await createChatSession("New Conversation");
+        activeSessionId = newSession.id;
+        setCurrentSessionId(activeSessionId);
+      } catch (e) {
+        console.error("Failed to create session", e);
+      }
+    }
+
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -128,7 +139,7 @@ const ChatPage: React.FC = () => {
     const controller = streamChatMessage(
       question,
       selectedDocIds.length > 0 ? selectedDocIds : undefined,
-      currentSessionId || undefined,
+      activeSessionId || undefined,
       {
         onToken: (token) => {
           setMessages((prev: ChatMessage[]) =>
