@@ -36,7 +36,7 @@ A **production-grade full-stack application** for uploading, processing, and int
                                                       │
                                           ┌───────────▼───────────┐
                                           │   Celery Worker       │
-                                          │   • Text Extraction   │
+                                          │   • Hybrid OCR        │
                                           │   • Field Extraction  │
                                           │   • Chunking          │
                                           │   • Embedding + Index │
@@ -52,6 +52,7 @@ A **production-grade full-stack application** for uploading, processing, and int
 - **Async background processing** via Celery workers with real-time progress
 - **Live progress tracking** via Redis Pub/Sub → Server-Sent Events (SSE)
 - **Text extraction** from PDF, DOCX, HTML, and plain text files
+- **Hybrid OCR Engine**: Intelligent extraction using **PyMuPDF** for digital layers and **Tesseract OCR** for image-based content (scanned PDFs, PNG, JPG)
 - **NLP field extraction** — automatic title, category, summary, and keyword extraction
 - **Review & edit** extracted results before finalizing
 - **Export** as JSON or CSV (single document or bulk)
@@ -68,7 +69,8 @@ A **production-grade full-stack application** for uploading, processing, and int
 | **6. Re-Ranking** | Cross-encoder (`ms-marco-MiniLM-L-6-v2`) for precision |
 | **7. Context Building** | Token-aware compression with deduplication (tiktoken) |
 | **8. LLM Generation** | Streaming responses via Gemini with source citations |
-| **9. Multi-Layer Caching** | Redis cache for embeddings + Q&A answers |
+| **9. Session Persistence** | URL-based routing (`/chat/:id`) ensures history survives refreshes |
+| **10. Multi-Layer Caching** | Redis cache for embeddings + Q&A answers |
 
 ### Dashboard & UX
 - **Search, filter, sort, paginate** documents
@@ -76,7 +78,7 @@ A **production-grade full-stack application** for uploading, processing, and int
 - **Finalization workflow** — lock edits after review approval
 - **Retry failed jobs** with one click
 - **Delete documents** with confirmation modal and full RAG cleanup
-- **Chat with conversation history** — persistent sessions with sidebar navigation
+- **Chat with conversation history** — URL-persistent sessions (`/chat/:id`) with sidebar navigation
 - **Document-scoped queries** — search all documents or select specific ones
 
 ---
@@ -88,6 +90,7 @@ A **production-grade full-stack application** for uploading, processing, and int
 | **Frontend** | React 18, TypeScript, Vite | SPA with real-time updates |
 | **UI Components** | Lucide React, Custom CSS | Modern, responsive design system |
 | **Backend API** | FastAPI (Python 3.12) | Async REST API with auto-generated docs |
+| **OCR Engine** | Tesseract OCR + PyMuPDF | Hybrid text extraction from images/PDFs |
 | **Database** | PostgreSQL 16 | Document metadata, processing results, chat history |
 | **Vector Store** | ChromaDB | Persistent vector embeddings per document |
 | **Task Queue** | Celery | Distributed async document processing |
@@ -162,7 +165,7 @@ cd doc-processor
 # 2. Set up environment (optional — for LLM chat features)
 echo "OPENROUTER_API_KEY=your_key_here" > .env
 
-# 3. Start all services
+# 3. Start all services (Tesseract is automatically installed in Docker)
 docker compose up --build -d
 
 # 4. Open the application
@@ -360,6 +363,8 @@ chat_messages
 | **Sentence-aware chunking** | Preserves semantic coherence vs. fixed-size character splitting |
 | **Async FastAPI + Sync Celery** | FastAPI handles I/O-bound web requests; Celery workers handle CPU-bound processing |
 | **Docker Compose** | One-command deployment of 5 services with health checks and volume persistence |
+| **Hybrid OCR** | Balances performance by using digital text where available and Tesseract only for embedded images |
+| **URL-Based State** | Uses `react-router` to manage `sessionId`, providing a robust UX that survives page refreshes |
 
 ---
 
@@ -369,7 +374,7 @@ Each document goes through these stages (published as real-time SSE events):
 
 ```
 1. job_started              → Status: processing
-2. document_parsing_started → Text extraction begins
+2. document_parsing_started → Hybrid OCR / Text extraction begins
 3. document_parsing_completed → Raw text extracted
 4. field_extraction_started → NLP analysis begins
 5. field_extraction_completed → Title, category, summary, keywords extracted
