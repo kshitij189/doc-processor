@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Send, MessageCircle, User, FileText, ChevronDown, ChevronUp,
   Loader2, Info, Search, FileSignature, MessageCirclePlus
@@ -14,8 +14,9 @@ const formatLogitAsPercentage = (logit: number): string => {
 };
 
 const ChatPage: React.FC = () => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { sessionId: routeSessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -55,7 +56,21 @@ const ChatPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleSelectSession = async (sessionId: string) => {
+  // Handle URL session ID changes
+  useEffect(() => {
+    if (routeSessionId && routeSessionId !== currentSessionId) {
+      handleSelectSession(routeSessionId, true);
+    } else if (!routeSessionId && currentSessionId) {
+      // If we're at /chat but have a session selected, clear it
+      setCurrentSessionId(null);
+      setMessages([]);
+    }
+  }, [routeSessionId]);
+
+  const handleSelectSession = async (sessionId: string, skipNavigate: boolean = false) => {
+    if (!skipNavigate) {
+      navigate(`/chat/${sessionId}`);
+    }
     setCurrentSessionId(sessionId);
     setIsLoading(true);
     setInput('');
@@ -65,20 +80,22 @@ const ChatPage: React.FC = () => {
       // Map API messages back to frontend format
       const mappedMessages: ChatMessage[] = (sessionData.messages || []).map((m: any) => ({
         id: m.id,
-        role: m.role,
+        role: m.role as 'user' | 'assistant',
         content: m.content,
         sources: m.context_docs || [],
         timestamp: new Date(m.created_at)
       }));
       setMessages(mappedMessages);
     } catch (e) {
-      console.error(e);
+      console.error("Failed to fetch session details:", e);
+      setMessages([]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const startNewChat = () => {
+    navigate('/chat');
     setCurrentSessionId(null);
     setMessages([]);
     setInput('');
@@ -113,6 +130,7 @@ const ChatPage: React.FC = () => {
         const newSession = await createChatSession("New Conversation");
         activeSessionId = newSession.id;
         setCurrentSessionId(activeSessionId);
+        navigate(`/chat/${activeSessionId}`, { replace: true });
       } catch (e) {
         console.error("Failed to create session", e);
       }

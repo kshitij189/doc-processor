@@ -54,19 +54,21 @@ async def list_sessions(db: AsyncSession = Depends(get_db), current_user: User =
     result = await db.execute(select(ChatSession).where(ChatSession.user_id == current_user.id).order_by(ChatSession.updated_at.desc()))
     return result.scalars().all()
 
+from sqlalchemy.orm import selectinload
+
 @router.get("/sessions/{session_id}", response_model=ChatSessionDetailResponse)
 async def get_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # Fetch session
-    result = await db.execute(select(ChatSession).where(ChatSession.id == session_id))
+    # Fetch session with messages eager loaded
+    result = await db.execute(
+        select(ChatSession)
+        .options(selectinload(ChatSession.messages))
+        .where(ChatSession.id == session_id)
+    )
     session = result.scalars().first()
+    
     if not session or session.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Session not found")
         
-    # Fetch messages
-    msg_result = await db.execute(select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc()))
-    messages = msg_result.scalars().all()
-    
-    session.messages = messages
     return session
 
 

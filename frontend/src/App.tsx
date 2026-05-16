@@ -67,6 +67,14 @@ const AppRoutes: React.FC = () => {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/chat/:sessionId"
+        element={
+          <ProtectedRoute>
+            <Layout><ChatPage /></Layout>
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
