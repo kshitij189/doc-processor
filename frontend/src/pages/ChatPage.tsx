@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Send, MessageCircle, User, FileText, ChevronDown, ChevronUp,
   Loader2, Info, Search, FileSignature, MessageCirclePlus
@@ -15,6 +15,7 @@ const formatLogitAsPercentage = (logit: number): string => {
 
 const ChatPage: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const navigate = useNavigate();
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -344,16 +345,16 @@ const ChatPage: React.FC = () => {
                   {expandedSources.has(msg.id) && (
                     <div className="sources-list">
                       {msg.sources.map((src, i) => (
-                        <div key={i} className="source-card">
+                        <div key={i} className="source-card source-card-clickable" onClick={() => src.document_id && navigate(`/documents/${src.document_id}`, { state: { highlightText: src.full_text || src.text } })}>
                           <div className="source-header">
                             <span className="source-badge">Source {i + 1}</span>
                             <span className="source-score">
                               Relevance: {formatLogitAsPercentage(src.score)}%
                             </span>
                             {src.document_id && (
-                              <Link to={`/documents/${src.document_id}`} className="source-doc-link">
-                                {getDocName(src.document_id)}
-                              </Link>
+                              <span className="source-doc-link">
+                                {getDocName(src.document_id)} →
+                              </span>
                             )}
                           </div>
                           <p className="source-text">{src.text}</p>

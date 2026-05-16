@@ -636,6 +636,7 @@ def rag_query(
     sources = [
         {
             "text": chunk["text"][:200] + ("..." if len(chunk["text"]) > 200 else ""),
+            "full_text": chunk["text"],
             "document_id": chunk.get("metadata", {}).get("document_id", ""),
             "chunk_index": chunk.get("metadata", {}).get("chunk_index", 0),
             "score": round(chunk.get("rerank_score", 0), 4),

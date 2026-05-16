@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, RefreshCw, CheckCircle, Download, Save,
-  FileText, Clock, HardDrive, Tag, Trash2, AlertTriangle
+  FileText, Clock, HardDrive, Tag, Trash2, AlertTriangle, X
 } from 'lucide-react';
 import { fetchDocument, retryDocument, updateResult, finalizeDocument, getExportUrl, deleteDocument } from '../api/client';
 import { useSSE } from '../hooks/useSSE';
@@ -10,9 +10,89 @@ import StatusBadge from '../components/StatusBadge';
 import ProgressBar from '../components/ProgressBar';
 import type { Document } from '../types';
 
+/** Normalize whitespace for fuzzy text matching */
+const normalizeWS = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+/** Component that highlights a matching snippet within raw text */
+const HighlightedText: React.FC<{
+  rawText: string;
+  highlightText: string;
+  highlightRef: React.RefObject<HTMLElement>;
+}> = ({ rawText, highlightText, highlightRef }) => {
+  // Try exact match first
+  let idx = rawText.indexOf(highlightText);
+
+  if (idx !== -1) {
+    const before = rawText.substring(0, idx);
+    const match = rawText.substring(idx, idx + highlightText.length);
+    const after = rawText.substring(idx + highlightText.length);
+    return (
+      <>
+        {before}
+        <mark ref={highlightRef as any} className="citation-highlight">{match}</mark>
+        {after}
+      </>
+    );
+  }
+
+  // Fuzzy fallback: normalize whitespace and search
+  const normalizedRaw = normalizeWS(rawText);
+  const normalizedHighlight = normalizeWS(highlightText);
+  const fuzzyIdx = normalizedRaw.indexOf(normalizedHighlight);
+
+  if (fuzzyIdx !== -1) {
+    // Map normalized index back to original text approximately
+    // Walk through original text to find the corresponding position
+    let origStart = 0;
+    let normCount = 0;
+    let inWhitespace = false;
+    
+    for (let i = 0; i < rawText.length && normCount < fuzzyIdx; i++) {
+      if (/\s/.test(rawText[i])) {
+        if (!inWhitespace) {
+          normCount++; // counts as one space in normalized
+          inWhitespace = true;
+        }
+      } else {
+        normCount++;
+        inWhitespace = false;
+      }
+      origStart = i + 1;
+    }
+
+    // Find a reasonable end by searching for the last ~40 chars of the highlight
+    const tailSnippet = highlightText.trim().slice(-40);
+    let origEnd = rawText.indexOf(tailSnippet, origStart);
+    if (origEnd !== -1) {
+      origEnd += tailSnippet.length;
+    } else {
+      // Fallback: estimate length
+      origEnd = Math.min(origStart + highlightText.length + 50, rawText.length);
+    }
+
+    const before = rawText.substring(0, origStart);
+    const match = rawText.substring(origStart, origEnd);
+    const after = rawText.substring(origEnd);
+    return (
+      <>
+        {before}
+        <mark ref={highlightRef as any} className="citation-highlight">{match}</mark>
+        {after}
+      </>
+    );
+  }
+
+  // No match found — show full text without highlight
+  return <>{rawText}</>;
+};
+
+
 const DocumentDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const highlightText = (location.state as any)?.highlightText || null;
+  const highlightRef = useRef<HTMLElement>(null);
   const [doc, setDoc] = useState<Document | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +142,15 @@ const DocumentDetailPage: React.FC = () => {
       setTimeout(loadDoc, 1000);
     }
   }, [progress?.stage, loadDoc]);
+
+  // Auto-scroll to highlighted citation when arriving from Chat
+  useEffect(() => {
+    if (highlightText && highlightRef.current && doc) {
+      setTimeout(() => {
+        highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    }
+  }, [highlightText, doc]);
 
   const handleRetry = async () => {
     if (!id) return;
@@ -244,12 +333,33 @@ const DocumentDetailPage: React.FC = () => {
           {/* Raw Text Preview */}
           {doc.result?.raw_text && (
             <div className="card" style={{ marginTop: 'var(--space-4)' }}>
-              <h3 style={{ fontSize: 'var(--font-base)', fontWeight: 600, marginBottom: 'var(--space-3)' }}>
-                Raw Text Preview
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
+                <h3 style={{ fontSize: 'var(--font-base)', fontWeight: 600 }}>
+                  Raw Text Preview
+                </h3>
+                {highlightText && (
+                  <button
+                    className="btn btn-secondary btn-sm clear-highlight-btn"
+                    onClick={() => navigate(location.pathname, { replace: true, state: {} })}
+                  >
+                    <X size={12} />
+                    Clear highlight
+                  </button>
+                )}
+              </div>
               <div className="raw-text-preview">
-                {doc.result.raw_text.substring(0, 2000)}
-                {doc.result.raw_text.length > 2000 && '\n\n... (truncated)'}
+                {highlightText ? (
+                  <HighlightedText
+                    rawText={doc.result.raw_text}
+                    highlightText={highlightText}
+                    highlightRef={highlightRef}
+                  />
+                ) : (
+                  <>
+                    {doc.result.raw_text.substring(0, 2000)}
+                    {doc.result.raw_text.length > 2000 && '\n\n... (truncated)'}
+                  </>
+                )}
               </div>
             </div>
           )}

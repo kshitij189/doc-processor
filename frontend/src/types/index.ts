@@ -49,6 +49,7 @@ export interface UploadResponse {
 
 export interface ChatSource {
   text: string;
+  full_text: string;
   document_id: string;
   chunk_index: number;
   score: number;
