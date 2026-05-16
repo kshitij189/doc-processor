@@ -6,6 +6,7 @@ import csv
 import io
 import json
 from typing import Optional
+import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,11 +41,12 @@ async def export_document(
 
 async def export_all_documents(
     session: AsyncSession,
+    user_id: uuid.UUID,
     format: str = "json",
     finalized_only: bool = True,
 ) -> str:
     """Export all finalized documents."""
-    query = select(Document).options(selectinload(Document.result))
+    query = select(Document).options(selectinload(Document.result)).where(Document.user_id == user_id)
     if finalized_only:
         query = query.where(Document.is_finalized == True)
     else:

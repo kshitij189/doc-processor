@@ -116,7 +116,7 @@ async def export_all_documents(
     if format not in ("json", "csv"):
         raise HTTPException(status_code=400, detail="Format must be 'json' or 'csv'")
 
-    data = await export_service.export_all_documents(db, format, finalized_only)
+    data = await export_service.export_all_documents(db, current_user.id, format, finalized_only)
     media_type = "application/json" if format == "json" else "text/csv"
     filename = f"documents_export.{format}"
 
@@ -237,6 +237,10 @@ async def delete_document(
     current_user: User = Depends(get_current_user),
 ):
     """Delete a document completely from DB, disk, and RAG index."""
+    doc = await document_service.get_document_by_id(db, document_id)
+    if not doc or doc.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Document not found")
+
     success = await document_service.delete_document(db, document_id)
     if not success:
         raise HTTPException(status_code=404, detail="Document not found")

@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.database import get_db, async_session_factory
-from app.models import ChatSession, ChatMessage, User
+from app.models import ChatSession, ChatMessage, User, Document
 from app.services import rag_service
 from app.schemas import ChatSessionResponse, ChatSessionDetailResponse
 from app.services.auth_service import get_current_user
@@ -59,7 +59,7 @@ async def get_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     # Fetch session
     result = await db.execute(select(ChatSession).where(ChatSession.id == session_id))
     session = result.scalars().first()
-    if not session:
+    if not session or session.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Session not found")
         
     # Fetch messages
@@ -72,8 +72,35 @@ async def get_session(session_id: uuid.UUID, db: AsyncSession = Depends(get_db),
 
 # --- Chat Execution ---
 
+async def _validate_and_prepare_chat(request: ChatRequest, db: AsyncSession, current_user: User):
+    """Validates session ownership and populates/validates document_ids."""
+    if request.session_id:
+        sess_result = await db.execute(select(ChatSession).where(ChatSession.id == request.session_id))
+        session = sess_result.scalars().first()
+        if not session or session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to access this session")
+            
+    if request.document_ids:
+        # Validate requested documents belong to user
+        doc_result = await db.execute(
+            select(Document.id)
+            .where(Document.id.in_(request.document_ids), Document.user_id == current_user.id)
+        )
+        valid_ids = {str(did) for did in doc_result.scalars().all()}
+        for req_id in request.document_ids:
+            if req_id not in valid_ids:
+                raise HTTPException(status_code=403, detail=f"Not authorized to access document {req_id}")
+    else:
+        # Restrict to all of the user's documents if none specified
+        doc_result = await db.execute(select(Document.id).where(Document.user_id == current_user.id))
+        request.document_ids = [str(did) for did in doc_result.scalars().all()]
+        # If no documents, we can just let it proceed with an empty list
+        
+    return request
+
 @router.post("", response_model=ChatResponse)
 async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    request = await _validate_and_prepare_chat(request, db, current_user)
     history_dicts = None
     if request.session_id:
         msg_result = await db.execute(select(ChatMessage).where(ChatMessage.session_id == request.session_id).order_by(ChatMessage.created_at.asc()))
@@ -115,6 +142,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db), current
 
 @router.post("/stream")
 async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    request = await _validate_and_prepare_chat(request, db, current_user)
     history_dicts = None
     if request.session_id:
         msg_result = await db.execute(select(ChatMessage).where(ChatMessage.session_id == request.session_id).order_by(ChatMessage.created_at.asc()))

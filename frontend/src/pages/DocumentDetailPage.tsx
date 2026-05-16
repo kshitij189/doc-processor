@@ -4,7 +4,7 @@ import {
   ArrowLeft, RefreshCw, CheckCircle, Download, Save,
   FileText, Clock, HardDrive, Tag, Trash2, AlertTriangle, X
 } from 'lucide-react';
-import { fetchDocument, retryDocument, updateResult, finalizeDocument, getExportUrl, deleteDocument } from '../api/client';
+import { fetchDocument, retryDocument, updateResult, finalizeDocument, downloadDocumentExport, deleteDocument } from '../api/client';
 import { useSSE } from '../hooks/useSSE';
 import StatusBadge from '../components/StatusBadge';
 import ProgressBar from '../components/ProgressBar';
@@ -465,14 +465,14 @@ const DocumentDetailPage: React.FC = () => {
 
             {/* Export */}
             {doc.result && (
-              <>
-                <a href={getExportUrl(doc.id, 'json')} className="btn btn-secondary" download>
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => downloadDocumentExport(doc.id, 'json')} className="btn btn-secondary">
                   <Download size={16} /> Export JSON
-                </a>
-                <a href={getExportUrl(doc.id, 'csv')} className="btn btn-secondary" download>
+                </button>
+                <button onClick={() => downloadDocumentExport(doc.id, 'csv')} className="btn btn-secondary">
                   <Download size={16} /> Export CSV
-                </a>
-              </>
+                </button>
+              </div>
             )}
 
             {/* Delete */}

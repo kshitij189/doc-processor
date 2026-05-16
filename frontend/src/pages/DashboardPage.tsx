@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Search, FileText, Clock, ChevronLeft, ChevronRight, ArrowUpDown, Download, Trash2, AlertTriangle, X } from 'lucide-react';
 import { useDocuments } from '../hooks/useDocuments';
 import StatusBadge from '../components/StatusBadge';
-import { getBulkExportUrl, deleteDocument } from '../api/client';
+import { downloadBulkExport, deleteDocument } from '../api/client';
 
 const DashboardPage: React.FC = () => {
   const {
@@ -97,12 +97,12 @@ const DashboardPage: React.FC = () => {
           <p>Track and manage your document processing pipeline</p>
         </div>
         <div className="flex gap-2">
-          <a href={getBulkExportUrl('json')} className="btn btn-secondary btn-sm" download>
+          <button onClick={() => downloadBulkExport('json')} className="btn btn-secondary btn-sm">
             <Download size={14} /> Export JSON
-          </a>
-          <a href={getBulkExportUrl('csv')} className="btn btn-secondary btn-sm" download>
+          </button>
+          <button onClick={() => downloadBulkExport('csv')} className="btn btn-secondary btn-sm">
             <Download size={14} /> Export CSV
-          </a>
+          </button>
         </div>
       </div>
 

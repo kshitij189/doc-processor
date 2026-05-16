@@ -81,16 +81,38 @@ export async function finalizeDocument(id: string): Promise<Document> {
   return data;
 }
 
-export function getExportUrl(id: string, format: 'json' | 'csv'): string {
-  return `${API_BASE}/documents/${id}/export?format=${format}`;
+export async function downloadDocumentExport(id: string, format: 'json' | 'csv'): Promise<void> {
+  const response = await api.get(`/documents/${id}/export?format=${format}`, {
+    responseType: 'blob',
+  });
+  const blob = new Blob([response.data], { type: format === 'json' ? 'application/json' : 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `document_${id}.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
 }
 
 export async function deleteDocument(id: string): Promise<void> {
   await api.delete(`/documents/${id}`);
 }
 
-export function getBulkExportUrl(format: 'json' | 'csv', finalizedOnly = true): string {
-  return `${API_BASE}/documents/export/bulk?format=${format}&finalized_only=${finalizedOnly}`;
+export async function downloadBulkExport(format: 'json' | 'csv', finalizedOnly = true): Promise<void> {
+  const response = await api.get(`/documents/export/bulk?format=${format}&finalized_only=${finalizedOnly}`, {
+    responseType: 'blob',
+  });
+  const blob = new Blob([response.data], { type: format === 'json' ? 'application/json' : 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `documents_export.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
 }
 
 // --- Chat / RAG ---
