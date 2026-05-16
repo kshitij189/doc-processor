@@ -421,6 +421,7 @@ Original question: {original_query}"""
         response = client.chat.completions.create(
             model="google/gemini-2.5-flash",
             messages=[{"role": "user", "content": prompt}],
+            max_tokens=2000,
         )
         content_text = response.choices[0].message.content or ""
         variations = [
@@ -531,7 +532,8 @@ ANSWER:"""
         response = client.chat.completions.create(
             model="google/gemini-2.5-flash",
             messages=messages,
-            stream=True
+            stream=True,
+            max_tokens=4000,
         )
         for chunk in response:
             if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
