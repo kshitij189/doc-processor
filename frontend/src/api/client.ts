@@ -92,8 +92,10 @@ export async function downloadDocumentExport(id: string, format: 'json' | 'csv')
   a.download = `document_${id}.${format}`;
   document.body.appendChild(a);
   a.click();
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
+  setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }, 500);
 }
 
 export async function deleteDocument(id: string): Promise<void> {
@@ -111,8 +113,10 @@ export async function downloadBulkExport(format: 'json' | 'csv', finalizedOnly =
   a.download = `documents_export.${format}`;
   document.body.appendChild(a);
   a.click();
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
+  setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }, 500);
 }
 
 // --- Chat / RAG ---

@@ -56,16 +56,49 @@ def extract_text_from_file(file_path: str, file_type: str) -> str:
         if file_type in ("text/plain", "text/csv", "text/markdown"):
             with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                 return f.read()
+        elif file_type.startswith("image/"):
+            try:
+                import pytesseract
+                from PIL import Image
+                img = Image.open(file_path)
+                text = pytesseract.image_to_string(img)
+                return text
+            except Exception as e:
+                return f"[Image OCR failed: {str(e)}]"
         elif file_type == "application/pdf":
             try:
-                from PyPDF2 import PdfReader
-                reader = PdfReader(file_path)
-                text = ""
-                for page in reader.pages:
-                    text += page.extract_text() or ""
-                return text
-            except Exception:
-                return f"[PDF content from: {os.path.basename(file_path)}]"
+                import fitz
+                import pytesseract
+                from PIL import Image
+                import io
+
+                doc = fitz.open(file_path)
+                text_parts = []
+                for page in doc:
+                    # 1. Extract raw digital text
+                    page_text = page.get_text()
+                    if page_text:
+                        text_parts.append(page_text)
+                    
+                    # 2. Extract embedded images and OCR them
+                    image_list = page.get_images(full=True)
+                    for img_index, img_info in enumerate(image_list):
+                        try:
+                            xref = img_info[0]
+                            base_image = doc.extract_image(xref)
+                            image_bytes = base_image["image"]
+                            
+                            # Open image from bytes
+                            img = Image.open(io.BytesIO(image_bytes))
+                            ocr_text = pytesseract.image_to_string(img)
+                            if ocr_text.strip():
+                                text_parts.append(f"\n[OCR Image Text]:\n{ocr_text.strip()}\n")
+                        except Exception:
+                            continue # Skip failing images silently
+                
+                return "\n".join(text_parts)
+            except Exception as e:
+                return f"[PDF parsing failed: {str(e)}]"
         elif file_type in (
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ):
