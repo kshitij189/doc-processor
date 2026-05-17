@@ -28,12 +28,22 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB
 
     # CORS
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: list[str] | str = ["http://localhost:5173", "http://localhost:3000"]
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v) -> list[str]:
         if isinstance(v, str):
+            # If it's a JSON array string like '["*"]', load it as JSON
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    import json
+                    loaded = json.loads(v)
+                    if isinstance(loaded, list):
+                        return loaded
+                except Exception:
+                    pass
+            # Otherwise, split by comma
             return [x.strip() for x in v.split(",") if x.strip()]
         return v
 
