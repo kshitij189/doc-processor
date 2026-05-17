@@ -1,0 +1,24 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+# Install CPU-only PyTorch first to avoid downloading CUDA binaries (~900MB)
+RUN pip install --no-cache-dir --default-timeout=1000 torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
+
+COPY . .
+
+# Create uploads and chromadb directories
+RUN mkdir -p /app/uploads /app/chromadb_data
+
+EXPOSE 8000
+
+# Start Uvicorn in production mode without --reload and with workers
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
