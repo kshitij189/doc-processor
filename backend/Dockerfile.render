@@ -1,0 +1,27 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies (including Tesseract OCR)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+# Install CPU-only PyTorch first to avoid downloading massive CUDA binaries (~900MB)
+RUN pip install --no-cache-dir --default-timeout=1000 torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
+
+COPY . .
+
+# Create uploads and chromadb directories
+RUN mkdir -p /app/uploads /app/chromadb_data
+
+# Make start.sh executable and ensure Unix line endings
+RUN chmod +x /app/start.sh && sed -i 's/\r$//' /app/start.sh
+
+EXPOSE 8000
+
+# Run both FastAPI and Celery worker using the unified start script
+CMD ["/app/start.sh"]
