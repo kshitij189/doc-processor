@@ -14,6 +14,15 @@ class Settings(BaseSettings):
         "postgresql://postgres:postgres@localhost:5432/docprocessor",
     )
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def clean_database_url(cls, v) -> str:
+        if isinstance(v, str):
+            # asyncpg expects 'ssl' parameter instead of 'sslmode'
+            if "sslmode=" in v:
+                v = v.replace("sslmode=", "ssl=")
+        return v
+
     # Redis
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -22,6 +31,15 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = os.getenv(
         "CELERY_RESULT_BACKEND", "redis://localhost:6379/1"
     )
+
+    @field_validator("REDIS_URL", "CELERY_BROKER_URL", "CELERY_RESULT_BACKEND", mode="before")
+    @classmethod
+    def clean_redis_url(cls, v) -> str:
+        if isinstance(v, str) and v.startswith("rediss://"):
+            if "ssl_cert_reqs" not in v:
+                separator = "&" if "?" in v else "?"
+                return f"{v}{separator}ssl_cert_reqs=none"
+        return v
 
     # File uploads
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
