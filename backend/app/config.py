@@ -18,9 +18,28 @@ class Settings(BaseSettings):
     @classmethod
     def clean_database_url(cls, v) -> str:
         if isinstance(v, str):
-            # asyncpg expects 'ssl' parameter instead of 'sslmode'
-            if "sslmode=" in v:
-                v = v.replace("sslmode=", "ssl=")
+            from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
+            parsed = urlparse(v)
+            params = dict(parse_qsl(parsed.query))
+            
+            # Convert sslmode to ssl for asyncpg compatibility
+            if "sslmode" in params:
+                params["ssl"] = params.pop("sslmode")
+            elif "neon.tech" in parsed.netloc and "ssl" not in params:
+                params["ssl"] = "require"
+                
+            # Strip unsupported parameters (like channel_binding) from asyncpg connections
+            params.pop("channel_binding", None)
+            
+            new_query = urlencode(params)
+            v = urlunparse((
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                new_query,
+                parsed.fragment
+            ))
         return v
 
     # Redis
@@ -36,9 +55,25 @@ class Settings(BaseSettings):
     @classmethod
     def clean_redis_url(cls, v) -> str:
         if isinstance(v, str) and v.startswith("rediss://"):
-            if "ssl_cert_reqs" not in v:
-                separator = "&" if "?" in v else "?"
-                return f"{v}{separator}ssl_cert_reqs=none"
+            from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
+            parsed = urlparse(v)
+            params = dict(parse_qsl(parsed.query))
+            
+            # Celery requires ssl_cert_reqs to be exactly CERT_NONE, CERT_REQUIRED, or CERT_OPTIONAL
+            if "ssl_cert_reqs" not in params:
+                params["ssl_cert_reqs"] = "CERT_NONE"
+            elif params["ssl_cert_reqs"].lower() == "none":
+                params["ssl_cert_reqs"] = "CERT_NONE"
+                
+            new_query = urlencode(params)
+            v = urlunparse((
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                new_query,
+                parsed.fragment
+            ))
         return v
 
     # File uploads
