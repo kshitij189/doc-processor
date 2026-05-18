@@ -84,17 +84,17 @@ graph TD
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as User (Frontend)
-    participant API as FastAPI Backend
-    participant DB as PostgreSQL
-    participant Redis as Redis Broker & Cache
-    participant Worker as Celery Worker
-    participant Chroma as ChromaDB (Vector Store)
-    participant LLM as External LLM (OpenRouter)
+    actor User as "User (Frontend)"
+    participant API as "FastAPI Backend"
+    participant DB as "PostgreSQL"
+    participant Redis as "Redis Broker & Cache"
+    participant Worker as "Celery Worker"
+    participant Chroma as "ChromaDB (Vector Store)"
+    participant LLM as "External LLM (OpenRouter)"
 
     %% Flow 1: Document Upload & Async Processing
-    rect rgb(240, 245, 255)
-        note right of User: Phase 1: Document Upload & Async Processing
+    rect #f0f5ff
+        Note right of User: Phase 1: Document Upload & Async Processing
         User->>API: 1. POST /api/documents/upload (file)
         API->>DB: Create Document record (status=queued)
         DB-->>API: Document ID
@@ -129,8 +129,8 @@ sequenceDiagram
     end
 
     %% Flow 2: RAG Chat & Retrieval Query
-    rect rgb(245, 240, 255)
-        note right of User: Phase 2: Retrieval-Augmented Generation (RAG)
+    rect #f5f0ff
+        Note right of User: Phase 2: Retrieval-Augmented Generation (RAG)
         User->>API: 3. POST /api/chat/stream (Question + doc_ids)
         API->>Redis: Check Q&A Cache (query + doc_ids)
         alt Q&A Cache Hit
