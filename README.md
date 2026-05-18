@@ -77,6 +77,13 @@ graph TD
     class Celery worker;
     class Postgres,Chroma,Redis storage;
     class LLM external;
+
+    %% Style Subgraphs to be transparent (removes default white background on GitHub Dark Mode)
+    style Frontend fill:none,stroke:#3b82f6,stroke-width:1.5px
+    style Backend fill:none,stroke:#10b981,stroke-width:1.5px
+    style Broker fill:none,stroke:#f59e0b,stroke-width:1.5px
+    style Workers fill:none,stroke:#a855f7,stroke-width:1.5px
+    style Databases fill:none,stroke:#f59e0b,stroke-width:1.5px
 ```
 
 ### 🔄 End-to-End Data Flow Sequence
@@ -93,79 +100,75 @@ sequenceDiagram
     participant LLM as "External LLM (OpenRouter)"
 
     %% Flow 1: Document Upload & Async Processing
-    rect #f0f5ff
-        Note right of User: Phase 1: Document Upload & Async Processing
-        User->>API: 1. POST /api/documents/upload (file)
-        API->>DB: Create Document record (status=queued)
-        DB-->>API: Document ID
-        API->>Redis: Enqueue processing task (celery)
-        API-->>User: 202 Accepted (Document ID)
-        
-        Note over User, API: Frontend establishes SSE connection
-        User->>API: 2. GET /api/progress/{doc_id} (SSE)
-        API->>Redis: Subscribe to "progress:{doc_id}"
-        
-        Worker->>Redis: Fetch queued task
-        Worker->>Redis: Publish "job_started" event
-        Redis-->>API: Message received
-        API-->>User: SSE Event: job_started
-        
-        Worker->>Worker: Extract text (PyMuPDF / Tesseract OCR)
-        Worker->>Redis: Publish "document_parsing_completed"
-        API-->>User: SSE Event: document_parsing_completed
-        
-        Worker->>Worker: NLP field extraction (title, summary, keywords)
-        Worker->>Redis: Publish "field_extraction_completed"
-        API-->>User: SSE Event: field_extraction_completed
-        
-        Worker->>Worker: Chunk text & generate embeddings
-        Worker->>Chroma: Write vectors to per-document collection
-        Worker->>Redis: Publish "rag_indexing_completed"
-        API-->>User: SSE Event: rag_indexing_completed
-        
-        Worker->>DB: Save extracted result & update status=completed
-        Worker->>Redis: Publish "job_completed"
-        API-->>User: SSE Event: job_completed
-    end
+    Note right of User: Phase 1: Document Upload & Async Processing
+    User->>API: 1. POST /api/documents/upload (file)
+    API->>DB: Create Document record (status=queued)
+    DB-->>API: Document ID
+    API->>Redis: Enqueue processing task (celery)
+    API-->>User: 202 Accepted (Document ID)
+    
+    Note over User, API: Frontend establishes SSE connection
+    User->>API: 2. GET /api/progress/{doc_id} (SSE)
+    API->>Redis: Subscribe to "progress:{doc_id}"
+    
+    Worker->>Redis: Fetch queued task
+    Worker->>Redis: Publish "job_started" event
+    Redis-->>API: Message received
+    API-->>User: SSE Event: job_started
+    
+    Worker->>Worker: Extract text (PyMuPDF / Tesseract OCR)
+    Worker->>Redis: Publish "document_parsing_completed"
+    API-->>User: SSE Event: document_parsing_completed
+    
+    Worker->>Worker: NLP field extraction (title, summary, keywords)
+    Worker->>Redis: Publish "field_extraction_completed"
+    API-->>User: SSE Event: field_extraction_completed
+    
+    Worker->>Worker: Chunk text & generate embeddings
+    Worker->>Chroma: Write vectors to per-document collection
+    Worker->>Redis: Publish "rag_indexing_completed"
+    API-->>User: SSE Event: rag_indexing_completed
+    
+    Worker->>DB: Save extracted result & update status=completed
+    Worker->>Redis: Publish "job_completed"
+    API-->>User: SSE Event: job_completed
 
     %% Flow 2: RAG Chat & Retrieval Query
-    rect #f5f0ff
-        Note right of User: Phase 2: Retrieval-Augmented Generation (RAG)
-        User->>API: 3. POST /api/chat/stream (Question + doc_ids)
-        API->>Redis: Check Q&A Cache (query + doc_ids)
-        alt Q&A Cache Hit
-            Redis-->>API: Cached answer
-            API-->>User: Stream cached answer response
-        else Q&A Cache Miss
-            API->>LLM: Rewrite question (Generate 3 variations)
-            LLM-->>API: Query variations
-            
-            loop For each query variation
-                API->>Redis: Check Embedding Cache
-                alt Embedding Cache Hit
-                    Redis-->>API: Vector representation
-                else Embedding Cache Miss
-                    API->>API: Compute vector (all-MiniLM-L6-v2)
-                    API->>Redis: Cache vector (emb:sha256)
-                end
-                
-                API->>Chroma: Search collection (Semantic Vector Search)
-                Chroma-->>API: Top semantic chunks
-                API->>API: Local BM25 (Keyword search)
+    Note right of User: Phase 2: Retrieval-Augmented Generation (RAG)
+    User->>API: 3. POST /api/chat/stream (Question + doc_ids)
+    API->>Redis: Check Q&A Cache (query + doc_ids)
+    alt Q&A Cache Hit
+        Redis-->>API: Cached answer
+        API-->>User: Stream cached answer response
+    else Q&A Cache Miss
+        API->>LLM: Rewrite question (Generate 3 variations)
+        LLM-->>API: Query variations
+        
+        loop For each query variation
+            API->>Redis: Check Embedding Cache
+            alt Embedding Cache Hit
+                Redis-->>API: Vector representation
+            else Embedding Cache Miss
+                API->>API: Compute vector (all-MiniLM-L6-v2)
+                API->>Redis: Cache vector (emb:sha256)
             end
             
-            API->>API: Reciprocal Rank Fusion (RRF) & Cross-Encoder Re-Ranking
-            API->>API: Context Assembly & tiktoken truncation (4000 tokens)
-            
-            API->>LLM: Call chat completion with context (Stream stream=True)
-            loop Stream Answer Chunks
-                LLM-->>API: Text chunk
-                API-->>User: SSE token stream (citations included)
-            end
-            
-            API->>Redis: Cache completed Q&A answer
-            API->>DB: Save user & assistant messages to History
+            API->>Chroma: Search collection (Semantic Vector Search)
+            Chroma-->>API: Top semantic chunks
+            API->>API: Local BM25 (Keyword search)
         end
+        
+        API->>API: Reciprocal Rank Fusion (RRF) & Cross-Encoder Re-Ranking
+        API->>API: Context Assembly & tiktoken truncation (4000 tokens)
+        
+        API->>LLM: Call chat completion with context (Stream stream=True)
+        loop Stream Answer Chunks
+            LLM-->>API: Text chunk
+            API-->>User: SSE token stream (citations included)
+        end
+        
+        API->>Redis: Cache completed Q&A answer
+        API->>DB: Save user & assistant messages to History
     end
 ```
 
@@ -406,6 +409,10 @@ graph TD
     class Start,End start_end;
     class Rewrite,Fusion,Rerank,Context,LLM step;
     class Semantic,Keyword sub_step;
+
+    %% Style Subgraphs to be transparent (removes default white background on GitHub Dark Mode)
+    style QueryExpansion fill:none,stroke:#3b82f6,stroke-width:1.5px
+    style Retrieval fill:none,stroke:#3b82f6,stroke-width:1.5px
 ```
 
 ### Chunking Strategy
