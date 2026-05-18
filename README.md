@@ -8,39 +8,165 @@ A **production-grade full-stack application** for uploading, processing, and int
 
 ## 🏗️ System Architecture
 
+### 📡 Component Architecture
+
+```mermaid
+graph TD
+    %% Styling Definitions
+    classDef frontend fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#fff;
+    classDef backend fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#fff;
+    classDef worker fill:#311042,stroke:#a855f7,stroke-width:2px,color:#fff;
+    classDef storage fill:#1c1917,stroke:#f59e0b,stroke-width:2px,color:#fff;
+    classDef external fill:#172554,stroke:#3b82f6,stroke-dasharray: 5 5,stroke-width:2px,color:#fff;
+
+    %% Subgraphs
+    subgraph Frontend ["💻 Frontend (React + TS + Vite)"]
+        FE_Dash["Dashboard Page"]
+        FE_Detail["Document Detail Page"]
+        FE_Upload["Upload Page"]
+        FE_Chat["RAG Chat UI (SSE Stream)"]
+    end
+
+    subgraph Backend ["⚙️ Backend (FastAPI)"]
+        BE_Doc["Document Routes"]
+        BE_RAG["RAG Service"]
+        BE_SSE["Progress SSE (Redis Pub/Sub)"]
+    end
+
+    subgraph Broker ["🧠 Message Broker & Caching"]
+        Redis[("Redis 7<br/>• Task Broker<br/>• Embedding Cache<br/>• Q&A Cache<br/>• Progress Pub/Sub")]
+    end
+
+    subgraph Workers ["👷 Background Workers"]
+        Celery["Celery Worker<br/>• Hybrid OCR (Tesseract/PyMuPDF)<br/>• Chunking & Field Extraction<br/>• Embedding & Indexing"]
+    end
+
+    subgraph Databases ["🗄️ Database & Vector Store"]
+        Postgres[("PostgreSQL 16<br/>• Documents Metadata<br/>• Extracted Results<br/>• Chat History")]
+        Chroma[("ChromaDB<br/>• Persistent Vectors<br/>• Per-Doc Collections")]
+    end
+
+    LLM["🤖 External LLM API<br/>(OpenRouter / Gemini)"]
+
+    %% Connections
+    FE_Upload -->|1. Upload File| BE_Doc
+    FE_Dash & FE_Detail -->|Manage Docs| BE_Doc
+    FE_Chat -->|2. RAG Query| BE_RAG
+    BE_SSE -->|7. SSE Stream| FE_Dash
+    BE_SSE -->|7. SSE Stream| FE_Upload
+
+    BE_Doc -->|Write Metadata| Postgres
+    BE_Doc -->|3. Dispatch Task| Redis
+    Redis -->|4. Pull Task| Celery
+    
+    Celery -->|5. Extract Text & Embed| Celery
+    Celery -->|6a. Write Extracted Data| Postgres
+    Celery -->|6b. Write Vector Embeddings| Chroma
+    Celery -->|6c. Publish Progress| Redis
+    
+    Redis -.->|Read/Write Caches| BE_RAG
+    BE_RAG -->|Semantic Search| Chroma
+    BE_RAG -->|Read History| Postgres
+    BE_RAG -->|Generate Answer| LLM
+    
+    Redis -->|Listen to Events| BE_SSE
+
+    %% Apply Classes
+    class FE_Dash,FE_Detail,FE_Upload,FE_Chat frontend;
+    class BE_Doc,BE_RAG,BE_SSE backend;
+    class Celery worker;
+    class Postgres,Chroma,Redis storage;
+    class LLM external;
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                           FRONTEND                                  │
-│  React 18 + TypeScript + Vite                                       │
-│  ┌──────────┐ ┌───────────────┐ ┌──────────┐ ┌───────────────────┐  │
-│  │Dashboard │ │ Document      │ │  Upload  │ │  RAG Chat         │  │
-│  │  Page    │ │ Detail Page   │ │  Page    │ │  (Streaming SSE)  │  │
-│  └──────────┘ └───────────────┘ └──────────┘ └───────────────────┘  │
-└────────────────────────────┬─────────────────────────────────────────┘
-                             │ REST API + SSE
-┌────────────────────────────▼─────────────────────────────────────────┐
-│                         BACKEND (FastAPI)                            │
-│  ┌─────────────┐  ┌─────────────────┐  ┌──────────────────────────┐ │
-│  │ Document    │  │ RAG Service     │  │ Progress SSE             │ │
-│  │ Routes      │  │ (Full Pipeline) │  │ (Redis Pub/Sub)          │ │
-│  └──────┬──────┘  └────────┬────────┘  └──────────────────────────┘ │
-└─────────┼──────────────────┼────────────────────────────────────────┘
-          │                  │
-    ┌─────▼─────┐    ┌───────▼────────┐    ┌──────────────────────┐
-    │PostgreSQL │    │  ChromaDB      │    │  Redis               │
-    │           │    │  (Vector DB)   │    │  • Task Broker        │
-    │ • Docs    │    │  • Embeddings  │    │  • Embedding Cache    │
-    │ • Results │    │  • Collections │    │  • Q&A Cache          │
-    │ • Chat    │    │  per Document  │    │  • Progress Pub/Sub   │
-    └───────────┘    └────────────────┘    └───────────┬───────────┘
-                                                      │
-                                          ┌───────────▼───────────┐
-                                          │   Celery Worker       │
-                                          │   • Hybrid OCR        │
-                                          │   • Field Extraction  │
-                                          │   • Chunking          │
-                                          │   • Embedding + Index │
-                                          └───────────────────────┘
+
+### 🔄 End-to-End Data Flow Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User (Frontend)
+    participant API as FastAPI Backend
+    participant DB as PostgreSQL
+    participant Redis as Redis Broker & Cache
+    participant Worker as Celery Worker
+    participant Chroma as ChromaDB (Vector Store)
+    participant LLM as External LLM (OpenRouter)
+
+    %% Flow 1: Document Upload & Async Processing
+    rect rgb(240, 245, 255)
+        note right of User: Phase 1: Document Upload & Async Processing
+        User->>API: 1. POST /api/documents/upload (file)
+        API->>DB: Create Document record (status=queued)
+        DB-->>API: Document ID
+        API->>Redis: Enqueue processing task (celery)
+        API-->>User: 202 Accepted (Document ID)
+        
+        Note over User, API: Frontend establishes SSE connection
+        User->>API: 2. GET /api/progress/{doc_id} (SSE)
+        API->>Redis: Subscribe to "progress:{doc_id}"
+        
+        Worker->>Redis: Fetch queued task
+        Worker->>Redis: Publish "job_started" event
+        Redis-->>API: Message received
+        API-->>User: SSE Event: job_started
+        
+        Worker->>Worker: Extract text (PyMuPDF / Tesseract OCR)
+        Worker->>Redis: Publish "document_parsing_completed"
+        API-->>User: SSE Event: document_parsing_completed
+        
+        Worker->>Worker: NLP field extraction (title, summary, keywords)
+        Worker->>Redis: Publish "field_extraction_completed"
+        API-->>User: SSE Event: field_extraction_completed
+        
+        Worker->>Worker: Chunk text & generate embeddings
+        Worker->>Chroma: Write vectors to per-document collection
+        Worker->>Redis: Publish "rag_indexing_completed"
+        API-->>User: SSE Event: rag_indexing_completed
+        
+        Worker->>DB: Save extracted result & update status=completed
+        Worker->>Redis: Publish "job_completed"
+        API-->>User: SSE Event: job_completed
+    end
+
+    %% Flow 2: RAG Chat & Retrieval Query
+    rect rgb(245, 240, 255)
+        note right of User: Phase 2: Retrieval-Augmented Generation (RAG)
+        User->>API: 3. POST /api/chat/stream (Question + doc_ids)
+        API->>Redis: Check Q&A Cache (query + doc_ids)
+        alt Q&A Cache Hit
+            Redis-->>API: Cached answer
+            API-->>User: Stream cached answer response
+        else Q&A Cache Miss
+            API->>LLM: Rewrite question (Generate 3 variations)
+            LLM-->>API: Query variations
+            
+            loop For each query variation
+                API->>Redis: Check Embedding Cache
+                alt Embedding Cache Hit
+                    Redis-->>API: Vector representation
+                else Embedding Cache Miss
+                    API->>API: Compute vector (all-MiniLM-L6-v2)
+                    API->>Redis: Cache vector (emb:sha256)
+                end
+                
+                API->>Chroma: Search collection (Semantic Vector Search)
+                Chroma-->>API: Top semantic chunks
+                API->>API: Local BM25 (Keyword search)
+            end
+            
+            API->>API: Reciprocal Rank Fusion (RRF) & Cross-Encoder Re-Ranking
+            API->>API: Context Assembly & tiktoken truncation (4000 tokens)
+            
+            API->>LLM: Call chat completion with context (Stream stream=True)
+            loop Stream Answer Chunks
+                LLM-->>API: Text chunk
+                API-->>User: SSE token stream (citations included)
+            end
+            
+            API->>Redis: Cache completed Q&A answer
+            API->>DB: Save user & assistant messages to History
+        end
+    end
 ```
 
 ---
@@ -236,52 +362,50 @@ npm run dev
 
 ### How a Query is Processed
 
-```
-User Question
-     │
-     ▼
-┌─────────────────────┐
-│  Query Rewriting    │  LLM generates 2 alternative phrasings
-│  (3 query variants) │  for better retrieval recall
-└──────────┬──────────┘
-           │
-     ┌─────▼──────┐
-     │ For each   │
-     │ query      │
-     │ variant:   │
-     │            │
-     │  ┌────────────────┐
-     │  │ Semantic Search │  ChromaDB cosine similarity
-     │  │ (Vector)        │  on document embeddings
-     │  └────────────────┘
-     │  ┌────────────────┐
-     │  │ BM25 Keyword   │  Term frequency-based
-     │  │ Search          │  lexical matching
-     │  └────────────────┘
-     └────────┬───────────┘
-              │
-     ┌────────▼───────────┐
-     │ Reciprocal Rank    │  Fuses semantic + keyword
-     │ Fusion (k=60)      │  rankings into unified score
-     └────────┬───────────┘
-              │
-     ┌────────▼───────────┐
-     │ Cross-Encoder      │  Re-scores top candidates
-     │ Re-Ranking         │  with pairwise relevance
-     │ (top 5)            │  using ms-marco model
-     └────────┬───────────┘
-              │
-     ┌────────▼───────────┐
-     │ Token-Aware        │  Deduplicates chunks,
-     │ Context Building   │  truncates to 4000 tokens
-     │ (tiktoken)         │  budget with source labels
-     └────────┬───────────┘
-              │
-     ┌────────▼───────────┐
-     │ Gemini LLM         │  Generates answer grounded
-     │ Streaming Response  │  in context with [Source N]
-     │                     │  citations
-     └─────────────────────┘
+```mermaid
+graph TD
+    %% Styling Definitions
+    classDef start_end fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#fff;
+    classDef step fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#fff;
+    classDef sub_step fill:#172554,stroke:#3b82f6,stroke-width:1px,color:#fff;
+
+    %% Nodes
+    Start(["💬 User Question"])
+    
+    subgraph QueryExpansion ["1. Query Rewriting"]
+        Rewrite["LLM generates 2 alternative phrasings<br/>(Total: 3 query variants for high recall)"]
+    end
+    
+    subgraph Retrieval ["2. Parallel Hybrid Retrieval (For each variant)"]
+        Semantic["ChromaDB Semantic Search<br/>(Cosine similarity on embeddings)"]
+        Keyword["BM25 Keyword Search<br/>(Lexical term matching)"]
+    end
+    
+    Fusion["3. Reciprocal Rank Fusion (k=60)<br/>Fuses semantic & keyword rankings into unified score"]
+    
+    Rerank["4. Cross-Encoder Re-Ranking<br/>Re-scores top candidates using ms-marco-MiniLM-L-6-v2"]
+    
+    Context["5. Token-Aware Context Compression<br/>Deduplicates & truncates to 4,000 token budget (tiktoken)"]
+    
+    LLM["6. Gemini LLM Generation<br/>Generates streaming answer with grounded [Source N] citations"]
+    
+    End(["🏁 Final Answer Streamed to User"])
+
+    %% Connections
+    Start --> Rewrite
+    Rewrite --> Semantic
+    Rewrite --> Keyword
+    Semantic --> Fusion
+    Keyword --> Fusion
+    Fusion --> Rerank
+    Rerank --> Context
+    Context --> LLM
+    LLM --> End
+
+    %% Apply Classes
+    class Start,End start_end;
+    class Rewrite,Fusion,Rerank,Context,LLM step;
+    class Semantic,Keyword sub_step;
 ```
 
 ### Chunking Strategy
