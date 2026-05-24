@@ -17,7 +17,8 @@ export function useSSE(documentId: string | null) {
       eventSourceRef.current.close();
     }
 
-    const evtSource = new EventSource(`/api/progress/${documentId}`);
+    const API_BASE = import.meta.env.VITE_API_URL || '/api';
+    const evtSource = new EventSource(`${API_BASE}/progress/${documentId}`);
     eventSourceRef.current = evtSource;
 
     evtSource.onopen = () => {
