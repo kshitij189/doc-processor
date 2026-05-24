@@ -233,7 +233,7 @@ def batch_embed_and_store(document_id: str, chunks: list[dict]) -> int:
     # Batch embed uncached texts
     if uncached_texts:
         new_embeddings = model.encode(
-            uncached_texts, batch_size=32, show_progress_bar=False
+            uncached_texts, batch_size=4, show_progress_bar=False
         ).tolist()
 
         # Store in Redis cache (TTL 7 days)
