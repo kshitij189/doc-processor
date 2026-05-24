@@ -59,11 +59,11 @@ class Settings(BaseSettings):
             parsed = urlparse(v)
             params = dict(parse_qsl(parsed.query))
             
-            # Celery requires ssl_cert_reqs to be exactly CERT_NONE, CERT_REQUIRED, or CERT_OPTIONAL
+            # Celery requires ssl_cert_reqs to be exactly 'none', 'optional', or 'required'
             if "ssl_cert_reqs" not in params:
-                params["ssl_cert_reqs"] = "CERT_NONE"
-            elif params["ssl_cert_reqs"].lower() == "none":
-                params["ssl_cert_reqs"] = "CERT_NONE"
+                params["ssl_cert_reqs"] = "none"
+            elif params["ssl_cert_reqs"].upper() == "CERT_NONE":
+                params["ssl_cert_reqs"] = "none"
                 
             new_query = urlencode(params)
             v = urlunparse((
