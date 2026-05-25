@@ -41,11 +41,15 @@ export function useDocuments() {
     loadDocuments();
   }, [loadDocuments]);
 
-  // Auto-refresh every 5 seconds for live updates on dashboard
+  // Smart auto-refresh: poll every 5s only if docs are actively processing.
+  // When idle (all completed/failed), slow down to 30s to save server CPU.
   useEffect(() => {
-    const interval = setInterval(loadDocuments, 5000);
+    const hasActiveJobs = documents.some(
+      (d) => d.status === 'queued' || d.status === 'processing'
+    );
+    const interval = setInterval(loadDocuments, hasActiveJobs ? 5000 : 30000);
     return () => clearInterval(interval);
-  }, [loadDocuments]);
+  }, [loadDocuments, documents]);
 
   return {
     documents, total, loading, error,
