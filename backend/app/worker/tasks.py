@@ -199,7 +199,9 @@ def process_document(self, document_id: str):
         # Fetch document
         doc = session.query(Document).filter(Document.id == uuid.UUID(doc_id)).first()
         if not doc:
-            raise ValueError(f"Document {doc_id} not found")
+            # Document was deleted before this task ran — discard silently, do NOT retry
+            # (retrying will never help since the document is gone from the DB)
+            return {"status": "discarded", "reason": f"Document {doc_id} not found (likely deleted)"}
 
         # --- Stage 1: Job Started ---
         doc.status = DocumentStatus.PROCESSING
@@ -299,8 +301,8 @@ def process_document(self, document_id: str):
 
         publish_progress(doc_id, "job_failed", 0, f"Processing failed: {str(exc)[:200]}")
 
-        # Retry with exponential backoff
-        raise self.retry(exc=exc, countdown=10 * (self.request.retries + 1))
+        # Retry with exponential backoff for genuine processing errors
+        raise self.retry(exc=exc, countdown=10 * (self.request.retries + 1), max_retries=3)
 
     finally:
         session.close()
