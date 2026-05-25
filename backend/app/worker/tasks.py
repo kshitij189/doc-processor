@@ -254,8 +254,21 @@ def process_document(self, document_id: str):
         publish_progress(doc_id, "embedding_started", 92, "Generating embeddings for RAG...")
         try:
             from app.services.rag_service import semantic_chunk, batch_embed_and_store
-            chunks = semantic_chunk(raw_text)
+
+            # Truncate raw_text to 50k chars before chunking to avoid runaway
+            # memory usage on very large documents on free-tier (512MB RAM).
+            MAX_EMBED_CHARS = 50_000
+            embed_text = raw_text[:MAX_EMBED_CHARS] if len(raw_text) > MAX_EMBED_CHARS else raw_text
+
+            chunks = semantic_chunk(embed_text)
             if chunks:
+                # Cap at 100 chunks max — evenly sampled across the document
+                # so RAG still covers the full content, just at lower density.
+                MAX_CHUNKS = 100
+                if len(chunks) > MAX_CHUNKS:
+                    step = len(chunks) / MAX_CHUNKS
+                    chunks = [chunks[int(i * step)] for i in range(MAX_CHUNKS)]
+
                 batch_embed_and_store(doc_id, chunks)
                 publish_progress(doc_id, "embedding_completed", 97, f"Embedded {len(chunks)} chunks for RAG")
             else:
