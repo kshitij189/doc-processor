@@ -58,7 +58,20 @@ const UploadForm: React.FC = () => {
       // Navigate to dashboard after short delay
       setTimeout(() => navigate('/'), 1500);
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Upload failed');
+      let errorMessage = 'Upload failed';
+      if (err.response?.data?.detail) {
+        const detail = err.response.data.detail;
+        if (typeof detail === 'string') {
+          errorMessage = detail;
+        } else if (Array.isArray(detail)) {
+          errorMessage = detail.map((d: any) => `${d.loc?.[1] || 'field'}: ${d.msg}`).join(', ');
+        } else {
+          errorMessage = JSON.stringify(detail);
+        }
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      setError(errorMessage);
     } finally {
       setUploading(false);
     }
