@@ -41,9 +41,7 @@ api.interceptors.response.use(
 export async function uploadDocuments(files: File[]): Promise<UploadResponse> {
   const formData = new FormData();
   files.forEach((file) => formData.append('files', file));
-  const { data } = await api.post<UploadResponse>('/documents/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  const { data } = await api.post<UploadResponse>('/documents/upload', formData);
   return data;
 }
 
