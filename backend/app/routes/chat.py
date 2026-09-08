@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
 
 from app.database import get_db, async_session_factory
 from app.models import ChatSession, ChatMessage, User, Document
@@ -128,13 +129,15 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db), current
         db.add(user_msg)
         await db.commit()
 
-    result = _rag().rag_query(
-        question=request.question,
-        document_ids=request.document_ids,
-        stream=False,
-        history=history_dicts
+    result = await run_in_threadpool(
+        lambda: _rag().rag_query(
+            question=request.question,
+            document_ids=request.document_ids,
+            stream=False,
+            history=history_dicts,
+        )
     )
-    
+
     if request.session_id:
         assistant_msg = ChatMessage(
             session_id=request.session_id, 
@@ -170,11 +173,13 @@ async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db), 
         db.add(user_msg)
         await db.commit()
 
-    pipeline_result = _rag().rag_query(
-        question=request.question,
-        document_ids=request.document_ids,
-        stream=True,
-        history=history_dicts
+    pipeline_result = await run_in_threadpool(
+        lambda: _rag().rag_query(
+            question=request.question,
+            document_ids=request.document_ids,
+            stream=True,
+            history=history_dicts,
+        )
     )
 
     context = pipeline_result.get("context", "")
@@ -188,7 +193,12 @@ async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db), 
         }
 
         full_answer = []
-        for token in _rag().generate_answer_stream(request.question, context, history=history_dicts):
+        token_stream = _rag().generate_answer_stream(
+            request.question, context, history=history_dicts
+        )
+        # Each next() on this generator waits on the LLM, so step it in a thread
+        # rather than on the event loop.
+        async for token in iterate_in_threadpool(token_stream):
             full_answer.append(token)
             yield {
                 "event": "token",
@@ -229,6 +239,6 @@ async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db), 
 
 @router.get("/status")
 async def chat_status(current_user: User = Depends(get_current_user)):
-    status = _rag().get_rag_status()
+    status = await run_in_threadpool(lambda: _rag().get_rag_status())
     return status
 
