@@ -20,10 +20,32 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// The free instance spins down when idle and restarts on every deploy. While it
+// is coming back up, Render's edge answers with a gateway error that carries no
+// CORS header, so the browser surfaces it as "Network Error" (or as a CORS
+// violation in the console) rather than as the temporary outage it is. Retry
+// those instead of failing the page.
+const MAX_RETRIES = 3;
+const TRANSIENT_STATUSES = [502, 503, 504];
+
+const isTransient = (error: any): boolean => {
+  // No response at all means the request never completed: a gateway error
+  // stripped of CORS headers, a dropped connection, or a cold-start timeout.
+  if (!error.response) return true;
+  return TRANSIENT_STATUSES.includes(error.response.status);
+};
+
+// Only replay requests that are safe to repeat. An upload must never be retried
+// automatically — it could store the same document twice.
+const isRetryable = (config: any): boolean =>
+  !!config && (config.method ?? 'get').toLowerCase() === 'get';
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // Redirect to login on 401 (but not for auth endpoints themselves)
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (
       error.response?.status === 401 &&
       !error.config?.url?.includes('/auth/')
@@ -31,7 +53,23 @@ api.interceptors.response.use(
       localStorage.removeItem('dp_token');
       localStorage.removeItem('dp_user');
       window.location.href = '/login';
+      return Promise.reject(error);
     }
+
+    const config = error.config;
+    if (isRetryable(config) && isTransient(error)) {
+      config.__retryCount = (config.__retryCount ?? 0) + 1;
+      if (config.__retryCount <= MAX_RETRIES) {
+        // 1s, 2s, 4s — a cold start typically needs 30-50s, so this covers a
+        // restart without hammering a server that is already struggling.
+        await delay(1000 * 2 ** (config.__retryCount - 1));
+        return api(config);
+      }
+      error.message =
+        'Could not reach the server. It may be starting up after being idle — ' +
+        'wait a moment and refresh.';
+    }
+
     return Promise.reject(error);
   }
 );
