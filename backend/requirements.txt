@@ -15,7 +15,10 @@ pytesseract==0.3.10
 Pillow==10.3.0
 # RAG dependencies
 chromadb==0.5.23
-sentence-transformers==3.3.1
+# ONNX runtime embeddings rather than sentence-transformers/PyTorch: same
+# MiniLM models and the same 384-dim vectors, at roughly a third of the RSS,
+# which is what makes this fit in a 512MB instance.
+fastembed==0.8.0
 openai==1.60.1
 rank-bm25==0.2.2
 tiktoken==0.8.0

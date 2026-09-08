@@ -18,10 +18,10 @@ import re
 from typing import Generator, Optional
 
 import chromadb
+import numpy as np
 import redis
 import tiktoken
 from rank_bm25 import BM25Okapi
-from sentence_transformers import SentenceTransformer, CrossEncoder
 
 from openai import OpenAI
 
@@ -33,26 +33,65 @@ logger.setLevel(logging.INFO)
 # ---------------------------------------------------------------------------
 # Globals (lazily initialised)
 # ---------------------------------------------------------------------------
-_embed_model: Optional[SentenceTransformer] = None
-_reranker: Optional[CrossEncoder] = None
+_embed_model = None
+_reranker = None
 _chroma_client: Optional[chromadb.ClientAPI] = None
 _redis_client: Optional[redis.Redis] = None
 _tokenizer = None
 
 
-def _get_embed_model() -> SentenceTransformer:
+class _OnnxEmbedder:
+    """
+    sentence-transformers-compatible wrapper over fastembed.
+
+    Exposes .encode() with the same shapes the pipeline already expects so the
+    retrieval code is unchanged. The underlying model and its 384-dim output
+    space are identical to the SentenceTransformer build, so vectors indexed by
+    either implementation remain comparable.
+    """
+
+    def __init__(self, model_name: str):
+        from fastembed import TextEmbedding
+
+        self._model = TextEmbedding(model_name=model_name)
+
+    def encode(self, texts, batch_size: int = 8, show_progress_bar: bool = False):
+        single = isinstance(texts, str)
+        items = [texts] if single else list(texts)
+        vectors = list(self._model.embed(items, batch_size=batch_size))
+        return vectors[0] if single else np.array(vectors)
+
+
+class _OnnxReranker:
+    """CrossEncoder-compatible wrapper over fastembed's TextCrossEncoder."""
+
+    def __init__(self, model_name: str):
+        from fastembed.rerank.cross_encoder import TextCrossEncoder
+
+        self._model = TextCrossEncoder(model_name=model_name)
+
+    def predict(self, pairs):
+        # Every pair shares one query — rerank() takes that query plus documents.
+        if not pairs:
+            return []
+        query = pairs[0][0]
+        documents = [text for _, text in pairs]
+        return list(self._model.rerank(query, documents))
+
+
+def _get_embed_model() -> _OnnxEmbedder:
     global _embed_model
     if _embed_model is None:
         logger.info("Loading embedding model: %s", settings.EMBEDDING_MODEL)
-        _embed_model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        _embed_model = _OnnxEmbedder(settings.EMBEDDING_MODEL)
     return _embed_model
 
 
-def _get_reranker() -> CrossEncoder:
+def _get_reranker() -> _OnnxReranker:
     global _reranker
     if _reranker is None:
         logger.info("Loading re-ranker model: %s", settings.RERANKER_MODEL)
-        _reranker = CrossEncoder(settings.RERANKER_MODEL)
+        _reranker = _OnnxReranker(settings.RERANKER_MODEL)
     return _reranker
 
 

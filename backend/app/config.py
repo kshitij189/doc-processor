@@ -103,8 +103,10 @@ class Settings(BaseSettings):
     # --- RAG Configuration ---
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
     CHROMA_DIR: str = os.getenv("CHROMA_DIR", "./chromadb_data")
-    EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
-    RERANKER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # fastembed identifiers for the same MiniLM models used before the ONNX
+    # switch — the embedding space (384-dim) is unchanged.
+    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    RERANKER_MODEL: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     MAX_CONTEXT_TOKENS: int = 4000
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
