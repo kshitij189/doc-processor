@@ -24,6 +24,9 @@ from app.models import User
 
 router = APIRouter(prefix="/api/documents", tags=["Documents"])
 
+# Read uploads off the wire in 1MB slices.
+CHUNK_SIZE = 1024 * 1024
+
 
 @router.post("/upload", response_model=UploadResponse, status_code=201)
 async def upload_documents(
@@ -39,22 +42,31 @@ async def upload_documents(
     uploaded_docs = []
 
     for file in files:
-        # Validate file size
-        contents = await file.read()
-        if len(contents) > settings.MAX_FILE_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File {file.filename} exceeds max size of {settings.MAX_FILE_SIZE} bytes",
-            )
-
-        # Save file to disk
         file_id = str(uuid.uuid4())
         ext = os.path.splitext(file.filename)[1] if file.filename else ""
         safe_filename = f"{file_id}{ext}"
         file_path = os.path.join(settings.UPLOAD_DIR, safe_filename)
 
-        with open(file_path, "wb") as f:
-            f.write(contents)
+        # Stream to disk in chunks rather than reading the whole file into memory —
+        # a single 50MB upload would otherwise be held in RAM twice.
+        file_size = 0
+        try:
+            with open(file_path, "wb") as f:
+                while chunk := await file.read(CHUNK_SIZE):
+                    file_size += len(chunk)
+                    if file_size > settings.MAX_FILE_SIZE:
+                        raise HTTPException(
+                            status_code=413,
+                            detail=(
+                                f"File {file.filename} exceeds max size of "
+                                f"{settings.MAX_FILE_SIZE} bytes"
+                            ),
+                        )
+                    f.write(chunk)
+        except Exception:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            raise
 
         # Create document record + dispatch Celery task
         doc = await document_service.create_document(
@@ -62,7 +74,7 @@ async def upload_documents(
             filename=file.filename or "unnamed",
             file_path=file_path,
             file_type=file.content_type or "application/octet-stream",
-            file_size=len(contents),
+            file_size=file_size,
             user_id=current_user.id,
         )
         uploaded_docs.append(doc)

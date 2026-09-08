@@ -2,6 +2,7 @@
 Service layer for document business logic.
 """
 
+import logging
 import os
 import uuid
 from typing import Optional
@@ -14,6 +15,8 @@ from app.config import settings
 from app.models import Document, DocumentStatus, ProcessingResult
 from app.worker.tasks import process_document
 from app.services.rag_service import delete_document_index
+
+logger = logging.getLogger(__name__)
 
 
 async def delete_document(session: AsyncSession, document_id: uuid.UUID) -> bool:
@@ -67,9 +70,18 @@ async def create_document(
     session.add(doc)
     await session.flush()
 
-    # Dispatch Celery task
-    task = process_document.delay(str(doc.id))
-    doc.celery_task_id = task.id
+    # Dispatch Celery task. A broker outage must not fail the upload itself —
+    # the file is already saved, so mark the document failed and let the user retry.
+    try:
+        task = process_document.delay(str(doc.id))
+        doc.celery_task_id = task.id
+    except Exception as exc:
+        logger.exception("Failed to queue processing task for document %s", doc.id)
+        doc.status = DocumentStatus.FAILED
+        doc.error_message = (
+            f"Could not queue processing task ({type(exc).__name__}). "
+            "The task broker is unreachable — retry once it is back."
+        )
     await session.flush()
 
     # Re-fetch with eager-loaded relationships so Pydantic can serialize

@@ -20,6 +20,19 @@ celery_config = {
     "worker_prefetch_multiplier": 1,
     "task_reject_on_worker_lost": True,
     "broker_connection_retry_on_startup": True,
+    # Fail fast when the broker is unreachable instead of hanging the HTTP
+    # request that is publishing the task.
+    "broker_transport_options": {
+        "socket_connect_timeout": 5,
+        "socket_timeout": 5,
+    },
+    "broker_connection_timeout": 5,
+    "task_publish_retry_policy": {
+        "max_retries": 1,
+        "interval_start": 0,
+        "interval_step": 0.5,
+        "interval_max": 1,
+    },
 }
 
 # If using secure Redis in production (rediss://), inject standard TLS config
