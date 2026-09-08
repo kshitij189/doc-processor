@@ -1,6 +1,12 @@
 #!/bin/bash
-# Prevent PyTorch from spinning up excessive threads that thrash CPU limits
+# Keep onnxruntime single-threaded: extra threads cost CPU we do not have and,
+# more importantly, each one gets its own allocator arena.
 export OMP_NUM_THREADS=1
+
+# glibc gives every thread a separate malloc arena, which inflates RSS well
+# beyond live data in a multi-threaded process like onnxruntime. Capping the
+# arenas reclaims tens of MB — material when the whole instance is 512MB.
+export MALLOC_ARENA_MAX=2
 
 # Start Redis as the Celery broker inside this container. Persistence is off:
 # this is a task queue, not a datastore, so snapshots would only cost memory
@@ -34,7 +40,14 @@ done
 
 # Start Celery worker in the background with lowest CPU priority (nice -n 19)
 # This ensures API requests (Uvicorn) stay fast even during heavy PyTorch embeddings
-nice -n 19 celery -A app.worker.celery_app worker --loglevel=info --concurrency=1 &
+# --max-tasks-per-child recycles the child process periodically so the memory
+# held by the embedding and re-ranker models is returned to the OS rather than
+# accumulating for the life of the container. The models are baked into the
+# image, so reloading them costs seconds, not a download.
+nice -n 19 celery -A app.worker.celery_app worker \
+    --loglevel=info \
+    --concurrency=1 \
+    --max-tasks-per-child=20 &
 
 # Start Uvicorn API server in the foreground
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1

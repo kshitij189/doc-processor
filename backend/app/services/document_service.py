@@ -28,13 +28,12 @@ async def delete_document(session: AsyncSession, document_id: uuid.UUID) -> bool
     if not doc:
         return False
 
-    # 1. Remove from RAG Index. Imported here rather than at module scope so the
-    # API process does not load sentence-transformers/torch just to serve
-    # document CRUD — see the note in app/routes/chat.py.
+    # 1. Remove from RAG Index — handed to the worker, which is the only process
+    # that loads chromadb and the models (see the note in app/routes/chat.py).
     try:
-        from app.services.rag_service import delete_document_index
+        from app.worker.tasks import delete_index
 
-        delete_document_index(str(doc.id))
+        delete_index.delay(str(doc.id))
     except Exception:
         pass # Logging is already in the service
 

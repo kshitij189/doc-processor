@@ -15,9 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
 
+from app.config import settings
 from app.database import get_db, async_session_factory
 from app.models import ChatSession, ChatMessage, User, Document
 from app.schemas import ChatSessionResponse, ChatSessionDetailResponse
+from app.services import llm_service
 from app.services.auth_service import get_current_user
 
 logger = logging.getLogger("chat_api")
@@ -25,20 +27,26 @@ logger = logging.getLogger("chat_api")
 router = APIRouter(prefix="/api/chat", tags=["Chat / RAG"])
 
 
-def _rag():
-    """
-    Import the RAG service lazily.
+# Retrieval timeout. The worker handles one job at a time, so a query can sit
+# behind a document being processed; this is generous enough to wait it out but
+# still bounded so a request cannot hang forever.
+RETRIEVAL_TIMEOUT = 180
 
-    Importing it pulls in sentence-transformers, torch and chromadb, which cost
-    a few hundred MB of RSS. At module scope that memory is held by the API
-    process from startup, leaving too little of the 512MB free instance for the
-    Celery worker to load an embedding model — the worker gets OOM-killed
-    mid-document and processing stalls. Deferring it means only an actual chat
-    request pays that cost.
-    """
-    from app.services import rag_service
 
-    return rag_service
+def _retrieve(question: str, document_ids: Optional[list[str]]) -> dict:
+    """
+    Ask the Celery worker for the retrieval context.
+
+    Retrieval needs the embedding model, the cross-encoder and chromadb —
+    several hundred MB. The worker already loads them to index documents, so
+    running them here as well would exceed the 512MB instance and get the
+    container OOM-killed, which is what previously made chat requests take the
+    whole API down. The API only generates the answer, which needs no models.
+    """
+    from app.worker.tasks import retrieve_context
+
+    async_result = retrieve_context.delay(question, document_ids)
+    return async_result.get(timeout=RETRIEVAL_TIMEOUT)
 
 
 class ChatRequest(BaseModel):
@@ -129,14 +137,19 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db), current
         db.add(user_msg)
         await db.commit()
 
-    result = await run_in_threadpool(
-        lambda: _rag().rag_query(
-            question=request.question,
-            document_ids=request.document_ids,
-            stream=False,
-            history=history_dicts,
+    retrieval = await run_in_threadpool(
+        lambda: _retrieve(request.question, request.document_ids)
+    )
+    answer = await run_in_threadpool(
+        lambda: llm_service.generate_answer(
+            request.question, retrieval.get("context", ""), history_dicts
         )
     )
+    result = {
+        "answer": answer,
+        "sources": retrieval.get("sources", []),
+        "pipeline_info": retrieval.get("pipeline_info", {}),
+    }
 
     if request.session_id:
         assistant_msg = ChatMessage(
@@ -174,12 +187,7 @@ async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db), 
         await db.commit()
 
     pipeline_result = await run_in_threadpool(
-        lambda: _rag().rag_query(
-            question=request.question,
-            document_ids=request.document_ids,
-            stream=True,
-            history=history_dicts,
-        )
+        lambda: _retrieve(request.question, request.document_ids)
     )
 
     context = pipeline_result.get("context", "")
@@ -193,7 +201,7 @@ async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db), 
         }
 
         full_answer = []
-        token_stream = _rag().generate_answer_stream(
+        token_stream = llm_service.generate_answer_stream(
             request.question, context, history=history_dicts
         )
         # Each next() on this generator waits on the LLM, so step it in a thread
@@ -239,6 +247,24 @@ async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db), 
 
 @router.get("/status")
 async def chat_status(current_user: User = Depends(get_current_user)):
-    status = await run_in_threadpool(lambda: _rag().get_rag_status())
-    return status
+    from app.worker.tasks import rag_status
+
+    # Needs chromadb, so the worker answers it — see _retrieve(). The chat page
+    # loads this on open, so degrade to an "unavailable" badge rather than
+    # erroring when the worker is busy indexing a document.
+    def _status():
+        try:
+            return rag_status.delay().get(timeout=30)
+        except Exception as exc:
+            logger.warning("RAG status unavailable: %s", exc)
+            return {
+                "api_key_configured": bool(settings.OPENROUTER_API_KEY),
+                "embedding_model": settings.EMBEDDING_MODEL,
+                "reranker_model": settings.RERANKER_MODEL,
+                "collections": None,
+                "total_chunks": None,
+                "detail": "Index stats unavailable — the worker is busy.",
+            }
+
+    return await run_in_threadpool(_status)
 

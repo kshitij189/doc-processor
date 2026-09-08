@@ -306,3 +306,41 @@ def process_document(self, document_id: str):
 
     finally:
         session.close()
+
+
+# ---------------------------------------------------------------------------
+# Retrieval, delegated from the API
+# ---------------------------------------------------------------------------
+# The embedding model, the cross-encoder and chromadb together cost several
+# hundred MB. Loading them in the API process as well as here would exceed the
+# 512MB instance and the kernel kills the container — which is what made chat
+# requests take the whole service down. The worker already needs them to index
+# documents, so it answers retrieval for the API too and stays the only process
+# that ever holds them.
+
+
+@celery_app.task(name="app.worker.tasks.retrieve_context", soft_time_limit=120, time_limit=150)
+def retrieve_context(question: str, document_ids: list[str] | None = None) -> dict:
+    """Run the retrieval half of the RAG pipeline and return the built context."""
+    from app.services.rag_service import rag_query
+
+    # stream=True returns {context, sources, pipeline_info} without generating
+    # an answer — the API streams that itself.
+    return rag_query(question=question, document_ids=document_ids, stream=True)
+
+
+@celery_app.task(name="app.worker.tasks.rag_status", soft_time_limit=60, time_limit=90)
+def rag_status() -> dict:
+    """Report index stats. Runs here because it needs chromadb."""
+    from app.services.rag_service import get_rag_status
+
+    return get_rag_status()
+
+
+@celery_app.task(name="app.worker.tasks.delete_index", soft_time_limit=60, time_limit=90)
+def delete_index(document_id: str) -> bool:
+    """Drop a document's vectors. Runs here because it needs chromadb."""
+    from app.services.rag_service import delete_document_index
+
+    delete_document_index(document_id)
+    return True

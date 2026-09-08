@@ -23,9 +23,8 @@ import redis
 import tiktoken
 from rank_bm25 import BM25Okapi
 
-from openai import OpenAI
-
 from app.config import settings
+from app.services import llm_service
 
 logger = logging.getLogger("rag_service")
 logger.setLevel(logging.INFO)
@@ -446,10 +445,7 @@ def rewrite_query(original_query: str) -> list[str]:
         return [original_query]
 
     try:
-        client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=settings.OPENROUTER_API_KEY,
-        )
+        client = llm_service._client()
 
         prompt = f"""Given the user question below, generate 2 alternative phrasings 
 that would help retrieve relevant document chunks. Return ONLY the queries, 
@@ -529,63 +525,11 @@ def build_context(chunks: list[dict], max_tokens: int = None) -> str:
 # 7. STREAMING LLM (Gemini)
 # =========================================================================
 
-def generate_answer_stream(
-    question: str,
-    context: str,
-    history: Optional[list[dict]] = None,
-) -> Generator[str, None, None]:
-    """
-    Generate a streaming answer using Gemini, grounded in the retrieved context.
-    Yields text chunks as they arrive.
-    """
-    if not settings.OPENROUTER_API_KEY:
-        yield "Error: OPENROUTER_API_KEY is not configured."
-        return
-
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=settings.OPENROUTER_API_KEY,
-    )
-
-    prompt = f"""You are a helpful document analysis assistant. Answer the user's 
-question based ONLY on the provided document context below. If the context doesn't 
-contain enough information to answer, say so clearly.
-
-Be concise, accurate, and cite [Source N] references when possible.
-
-CONTEXT:
-{context}
-
-QUESTION: {question}
-
-ANSWER:"""
-
-    messages = []
-    if history:
-        for msg in history:
-            messages.append({"role": msg["role"], "content": msg["content"]})
-            
-    messages.append({"role": "user", "content": prompt})
-
-    try:
-        response = client.chat.completions.create(
-            model="google/gemini-2.5-flash",
-            messages=messages,
-            stream=True,
-            max_tokens=4000,
-        )
-        for chunk in response:
-            if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
-    except Exception as e:
-        logger.error("LLM streaming failed: %s", e)
-        yield f"Error generating answer: {str(e)}"
-
-
-def generate_answer(question: str, context: str, history: Optional[list[dict]] = None) -> str:
-    """Non-streaming version for simpler use cases."""
-    parts = list(generate_answer_stream(question, context, history))
-    return "".join(parts)
+# Answer generation lives in llm_service so the API can import it without
+# pulling in chromadb and the embedding models. Re-exported here so the
+# retrieval pipeline below (and existing callers) keep working unchanged.
+generate_answer_stream = llm_service.generate_answer_stream
+generate_answer = llm_service.generate_answer
 
 
 # =========================================================================
