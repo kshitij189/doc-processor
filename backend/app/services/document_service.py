@@ -14,8 +14,6 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.models import Document, DocumentStatus, ProcessingResult
 from app.worker.tasks import process_document
-from app.services.rag_service import delete_document_index
-
 logger = logging.getLogger(__name__)
 
 
@@ -30,8 +28,12 @@ async def delete_document(session: AsyncSession, document_id: uuid.UUID) -> bool
     if not doc:
         return False
 
-    # 1. Remove from RAG Index
+    # 1. Remove from RAG Index. Imported here rather than at module scope so the
+    # API process does not load sentence-transformers/torch just to serve
+    # document CRUD — see the note in app/routes/chat.py.
     try:
+        from app.services.rag_service import delete_document_index
+
         delete_document_index(str(doc.id))
     except Exception:
         pass # Logging is already in the service

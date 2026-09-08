@@ -16,13 +16,28 @@ from sqlalchemy.future import select
 
 from app.database import get_db, async_session_factory
 from app.models import ChatSession, ChatMessage, User, Document
-from app.services import rag_service
 from app.schemas import ChatSessionResponse, ChatSessionDetailResponse
 from app.services.auth_service import get_current_user
 
 logger = logging.getLogger("chat_api")
 
 router = APIRouter(prefix="/api/chat", tags=["Chat / RAG"])
+
+
+def _rag():
+    """
+    Import the RAG service lazily.
+
+    Importing it pulls in sentence-transformers, torch and chromadb, which cost
+    a few hundred MB of RSS. At module scope that memory is held by the API
+    process from startup, leaving too little of the 512MB free instance for the
+    Celery worker to load an embedding model — the worker gets OOM-killed
+    mid-document and processing stalls. Deferring it means only an actual chat
+    request pays that cost.
+    """
+    from app.services import rag_service
+
+    return rag_service
 
 
 class ChatRequest(BaseModel):
@@ -113,7 +128,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db), current
         db.add(user_msg)
         await db.commit()
 
-    result = rag_service.rag_query(
+    result = _rag().rag_query(
         question=request.question,
         document_ids=request.document_ids,
         stream=False,
@@ -155,7 +170,7 @@ async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db), 
         db.add(user_msg)
         await db.commit()
 
-    pipeline_result = rag_service.rag_query(
+    pipeline_result = _rag().rag_query(
         question=request.question,
         document_ids=request.document_ids,
         stream=True,
@@ -173,7 +188,7 @@ async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db), 
         }
 
         full_answer = []
-        for token in rag_service.generate_answer_stream(request.question, context, history=history_dicts):
+        for token in _rag().generate_answer_stream(request.question, context, history=history_dicts):
             full_answer.append(token)
             yield {
                 "event": "token",
@@ -214,6 +229,6 @@ async def chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db), 
 
 @router.get("/status")
 async def chat_status(current_user: User = Depends(get_current_user)):
-    status = rag_service.get_rag_status()
+    status = _rag().get_rag_status()
     return status
 

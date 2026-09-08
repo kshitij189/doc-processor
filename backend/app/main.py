@@ -5,16 +5,18 @@ FastAPI application entry point.
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
+from sqlalchemy import text, update
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.database import engine, Base
 from app.middleware import CatchUnhandledErrors
+from app.models import Document, DocumentStatus
 from app.routes import documents, progress, chat, auth
 
 logging.basicConfig(
@@ -24,6 +26,38 @@ logging.basicConfig(
 logger = logging.getLogger("docprocessor")
 
 
+async def _fail_interrupted_documents() -> None:
+    """
+    Mark documents left mid-processing by a previous container as failed.
+
+    The broker runs inside this container, so its queue does not survive a
+    restart: anything still PROCESSING at boot has no task behind it and would
+    otherwise sit at partial progress forever. The age guard avoids racing a job
+    that a just-started worker legitimately picked up.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+    try:
+        async with engine.begin() as conn:
+            result = await conn.execute(
+                update(Document)
+                .where(
+                    Document.status == DocumentStatus.PROCESSING,
+                    Document.updated_at < cutoff,
+                )
+                .values(
+                    status=DocumentStatus.FAILED,
+                    error_message=(
+                        "Processing was interrupted by a server restart. "
+                        "Please retry."
+                    ),
+                )
+            )
+            if result.rowcount:
+                logger.info("Marked %d interrupted document(s) as failed", result.rowcount)
+    except Exception:
+        logger.exception("Could not sweep interrupted documents")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle: create tables on startup."""
@@ -31,6 +65,7 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     # Create upload directory
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    await _fail_interrupted_documents()
     yield
     await engine.dispose()
 

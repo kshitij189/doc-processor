@@ -20,6 +20,13 @@ celery_config = {
     "worker_prefetch_multiplier": 1,
     "task_reject_on_worker_lost": True,
     "broker_connection_retry_on_startup": True,
+    # Bound every task so a stall (a hung model download, a pathological PDF)
+    # surfaces as a failure the user can retry instead of a job that sits at
+    # partial progress forever. The soft limit raises inside the task so the
+    # pipeline's own handler marks the document failed; the hard limit is the
+    # backstop if that handler is itself stuck.
+    "task_soft_time_limit": 600,
+    "task_time_limit": 660,
     # Fail fast when the broker is unreachable instead of hanging the HTTP
     # request that is publishing the task.
     "broker_transport_options": {

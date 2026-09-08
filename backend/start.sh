@@ -5,14 +5,17 @@ export OMP_NUM_THREADS=1
 # Start Redis as the Celery broker inside this container. Persistence is off:
 # this is a task queue, not a datastore, so snapshots would only cost memory
 # (fork-on-save doubles RSS) and disk on an ephemeral filesystem.
-# maxmemory caps it well below the 512MB instance limit; noeviction means a full
-# queue rejects new tasks instead of silently dropping queued ones.
+# maxmemory caps it well below the 512MB instance limit. volatile-lru evicts
+# only keys that carry a TTL — that is the 7-day embedding cache written by
+# rag_service, never the queued Celery messages, which have no expiry. So a full
+# cache degrades into recomputing embeddings rather than dropping tasks or (as
+# noeviction would) refusing new ones and breaking uploads again.
 redis-server \
     --daemonize yes \
     --save '' \
     --appendonly no \
     --maxmemory 64mb \
-    --maxmemory-policy noeviction \
+    --maxmemory-policy volatile-lru \
     --bind 127.0.0.1 \
     --port 6379
 
