@@ -53,8 +53,32 @@ def publish_progress(document_id: str, stage: str, progress: int, message: str):
     redis_client.expire(f"doc_status:{document_id}", 3600)  # TTL 1 hour
 
 
+class ExtractionError(Exception):
+    """
+    Raised when a document's text cannot be extracted.
+
+    This used to be returned as the document's text — a string like
+    "[PDF parsing failed: ...]" was stored as raw_text, embedded, retrieved and
+    handed to the LLM as though it were the document. The document was then
+    marked completed, so a failure looked like success and chat confidently
+    reported that the file contained nothing. Failures must fail.
+    """
+
+
 def extract_text_from_file(file_path: str, file_type: str) -> str:
-    """Extract text content from uploaded file."""
+    """
+    Extract text content from an uploaded file.
+
+    Raises ExtractionError if the text cannot be read; never returns a
+    placeholder describing the failure.
+    """
+    if not os.path.exists(file_path):
+        raise ExtractionError(
+            "The uploaded file is no longer on the server. Free-tier storage is "
+            "cleared whenever the service restarts, so the original upload was "
+            "discarded. Please upload the document again."
+        )
+
     try:
         if file_type in ("text/plain", "text/csv", "text/markdown"):
             with open(file_path, "r", encoding="utf-8", errors="replace") as f:
@@ -67,7 +91,7 @@ def extract_text_from_file(file_path: str, file_type: str) -> str:
                 text = pytesseract.image_to_string(img)
                 return text
             except Exception as e:
-                return f"[Image OCR failed: {str(e)}]"
+                raise ExtractionError(f"Image OCR failed: {e}") from e
         elif file_type == "application/pdf":
             try:
                 import fitz
@@ -111,7 +135,7 @@ def extract_text_from_file(file_path: str, file_type: str) -> str:
 
                 return total_text
             except Exception as e:
-                return f"[PDF parsing failed: {str(e)}]"
+                raise ExtractionError(f"Could not read the PDF: {e}") from e
         elif file_type in (
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         ):
@@ -119,17 +143,22 @@ def extract_text_from_file(file_path: str, file_type: str) -> str:
                 from docx import Document as DocxDocument
                 doc = DocxDocument(file_path)
                 return "\n".join(p.text for p in doc.paragraphs)
-            except Exception:
-                return f"[DOCX content from: {os.path.basename(file_path)}]"
+            except Exception as e:
+                raise ExtractionError(f"Could not read the DOCX file: {e}") from e
         else:
             # Attempt to read as text for unknown types
             try:
                 with open(file_path, "r", encoding="utf-8", errors="replace") as f:
                     return f.read()
-            except Exception:
-                return f"[Binary content from: {os.path.basename(file_path)}]"
+            except Exception as e:
+                raise ExtractionError(
+                    f"Unsupported file type '{file_type}' and it is not readable "
+                    f"as text: {e}"
+                ) from e
+    except ExtractionError:
+        raise
     except Exception as e:
-        return f"[Error extracting text: {str(e)}]"
+        raise ExtractionError(f"Could not extract text: {e}") from e
 
 
 def extract_structured_fields(raw_text: str, filename: str) -> dict:
@@ -217,7 +246,24 @@ def process_document(self, document_id: str):
         time.sleep(1)
 
         # --- Stage 3: Parse the file ---
-        raw_text = extract_text_from_file(doc.file_path, doc.file_type)
+        try:
+            raw_text = extract_text_from_file(doc.file_path, doc.file_type)
+            if not raw_text.strip():
+                raise ExtractionError(
+                    "No readable text could be extracted from this document. If it "
+                    "is a scanned file, OCR found nothing legible."
+                )
+        except ExtractionError as exc:
+            # Retrying cannot help — the file is missing or unreadable — so fail
+            # the document with the real reason instead of storing the error as
+            # its content and reporting success.
+            doc.status = DocumentStatus.FAILED
+            doc.error_message = str(exc)[:500]
+            session.commit()
+            publish_progress(doc_id, "job_failed", 0, str(exc)[:200])
+            logger.warning("Extraction failed for %s: %s", doc_id, exc)
+            return {"status": "failed", "document_id": doc_id, "reason": str(exc)}
+
         publish_progress(doc_id, "document_parsing_completed", 40, "Document parsing completed")
         time.sleep(0.5)
 
@@ -336,6 +382,24 @@ def delete_index(document_id: str) -> bool:
     return True
 
 
+# Placeholders that older builds stored as a document's text when extraction
+# failed, before failures were made fatal.
+_LEGACY_FAILURE_PREFIXES = (
+    "[PDF parsing failed",
+    "[Image OCR failed",
+    "[Error extracting text",
+    "[DOCX content from",
+    "[Binary content from",
+)
+
+
+def _is_failed_extraction(raw_text: str | None) -> bool:
+    """True if this text is a stored extraction error rather than real content."""
+    if not raw_text:
+        return False
+    return raw_text.lstrip().startswith(_LEGACY_FAILURE_PREFIXES)
+
+
 @celery_app.task(
     name="app.worker.tasks.reindex_missing", soft_time_limit=1800, time_limit=1900
 )
@@ -350,10 +414,14 @@ def reindex_missing() -> dict:
     there without the original file — which matters because uploads are wiped
     by the same restart.
     """
-    from app.services.rag_service import collection_chunk_count, index_document_text
+    from app.services.rag_service import (
+        collection_chunk_count,
+        delete_document_index,
+        index_document_text,
+    )
 
     session = SyncSession()
-    restored, already_indexed, no_text = 0, 0, 0
+    restored, already_indexed, no_text, repaired = 0, 0, 0, 0
     try:
         rows = (
             session.query(Document, ProcessingResult)
@@ -364,6 +432,25 @@ def reindex_missing() -> dict:
 
         for doc, result in rows:
             doc_id = str(doc.id)
+
+            # Documents processed before extraction failures were made fatal have
+            # an error message stored as their text. They read as completed but
+            # contain nothing, so chat answers questions about the error string.
+            # Mark them failed and unindex them so the state is honest.
+            if _is_failed_extraction(result.raw_text):
+                doc.status = DocumentStatus.FAILED
+                doc.error_message = (
+                    "Text could not be extracted from this document, so there is "
+                    "nothing to search. Please upload it again."
+                )
+                session.commit()
+                try:
+                    delete_document_index(doc_id)
+                except Exception:
+                    pass
+                repaired += 1
+                continue
+
             if collection_chunk_count(doc_id) > 0:
                 already_indexed += 1
                 continue
@@ -380,6 +467,7 @@ def reindex_missing() -> dict:
             "restored": restored,
             "already_indexed": already_indexed,
             "no_text": no_text,
+            "repaired": repaired,
         }
         logger.info("Reindex sweep: %s", summary)
         return summary
