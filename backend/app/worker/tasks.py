@@ -6,6 +6,7 @@ events via Redis Pub/Sub at each stage.
 """
 
 import json
+import logging
 import os
 import time
 import uuid
@@ -18,6 +19,8 @@ from sqlalchemy.orm import sessionmaker
 from app.config import settings
 from app.models import Document, DocumentStatus, ProcessingResult
 from app.worker.celery_app import celery_app
+
+logger = logging.getLogger(__name__)
 
 # Synchronous DB session for Celery worker (Celery is sync)
 sync_engine = create_engine(
@@ -255,24 +258,11 @@ def process_document(self, document_id: str):
         # --- Stage 7: RAG Embedding ---
         publish_progress(doc_id, "embedding_started", 92, "Generating embeddings for RAG...")
         try:
-            from app.services.rag_service import semantic_chunk, batch_embed_and_store
+            from app.services.rag_service import index_document_text
 
-            # Truncate raw_text to 50k chars before chunking to avoid runaway
-            # memory usage on very large documents on free-tier (512MB RAM).
-            MAX_EMBED_CHARS = 50_000
-            embed_text = raw_text[:MAX_EMBED_CHARS] if len(raw_text) > MAX_EMBED_CHARS else raw_text
-
-            chunks = semantic_chunk(embed_text)
-            if chunks:
-                # Cap at 100 chunks max — evenly sampled across the document
-                # so RAG still covers the full content, just at lower density.
-                MAX_CHUNKS = 100
-                if len(chunks) > MAX_CHUNKS:
-                    step = len(chunks) / MAX_CHUNKS
-                    chunks = [chunks[int(i * step)] for i in range(MAX_CHUNKS)]
-
-                batch_embed_and_store(doc_id, chunks)
-                publish_progress(doc_id, "embedding_completed", 97, f"Embedded {len(chunks)} chunks for RAG")
+            stored = index_document_text(doc_id, raw_text)
+            if stored:
+                publish_progress(doc_id, "embedding_completed", 97, f"Embedded {stored} chunks for RAG")
             else:
                 publish_progress(doc_id, "embedding_completed", 97, "No chunks to embed")
         except Exception as emb_err:
@@ -344,3 +334,54 @@ def delete_index(document_id: str) -> bool:
 
     delete_document_index(document_id)
     return True
+
+
+@celery_app.task(
+    name="app.worker.tasks.reindex_missing", soft_time_limit=1800, time_limit=1900
+)
+def reindex_missing() -> dict:
+    """
+    Rebuild vectors for completed documents that are missing from the index.
+
+    The vector store lives on the container filesystem, which is wiped on every
+    restart and deploy, so a document indexed yesterday has no chunks today and
+    chat answers "I couldn't find any information" about documents that plainly
+    exist. The extracted text is in Postgres, so the index can be rebuilt from
+    there without the original file — which matters because uploads are wiped
+    by the same restart.
+    """
+    from app.services.rag_service import collection_chunk_count, index_document_text
+
+    session = SyncSession()
+    restored, already_indexed, no_text = 0, 0, 0
+    try:
+        rows = (
+            session.query(Document, ProcessingResult)
+            .join(ProcessingResult, ProcessingResult.document_id == Document.id)
+            .filter(Document.status == DocumentStatus.COMPLETED)
+            .all()
+        )
+
+        for doc, result in rows:
+            doc_id = str(doc.id)
+            if collection_chunk_count(doc_id) > 0:
+                already_indexed += 1
+                continue
+            if not result.raw_text:
+                no_text += 1
+                continue
+            try:
+                index_document_text(doc_id, result.raw_text)
+                restored += 1
+            except Exception:
+                logger.exception("Could not reindex document %s", doc_id)
+
+        summary = {
+            "restored": restored,
+            "already_indexed": already_indexed,
+            "no_text": no_text,
+        }
+        logger.info("Reindex sweep: %s", summary)
+        return summary
+    finally:
+        session.close()

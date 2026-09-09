@@ -299,6 +299,50 @@ def batch_embed_and_store(document_id: str, chunks: list[dict]) -> int:
 
 
 # =========================================================================
+# 2b. DOCUMENT INDEXING
+# =========================================================================
+
+# Bound the work for a single document. The instance has 512MB, so a very large
+# document is indexed at lower density rather than being allowed to blow up.
+MAX_EMBED_CHARS = 50_000
+MAX_CHUNKS = 100
+
+
+def index_document_text(document_id: str, raw_text: str) -> int:
+    """
+    Chunk and embed a document's text into the vector store.
+
+    Shared by initial processing and by the rebuild that runs after a restart,
+    so both produce an identical index.
+    """
+    if not raw_text:
+        return 0
+
+    chunks = semantic_chunk(raw_text[:MAX_EMBED_CHARS])
+    if not chunks:
+        return 0
+
+    # Sample evenly across the document so coverage stays whole-document.
+    if len(chunks) > MAX_CHUNKS:
+        step = len(chunks) / MAX_CHUNKS
+        chunks = [chunks[int(i * step)] for i in range(MAX_CHUNKS)]
+
+    batch_embed_and_store(document_id, chunks)
+    return len(chunks)
+
+
+def collection_chunk_count(document_id: str) -> int:
+    """How many chunks are indexed for a document (0 if never indexed)."""
+    try:
+        collection = _get_chroma().get_collection(
+            name=f"doc_{document_id.replace('-', '_')}"
+        )
+        return collection.count()
+    except Exception:
+        return 0
+
+
+# =========================================================================
 # 3. HYBRID RETRIEVAL (Semantic + BM25) + METADATA FILTERS
 # =========================================================================
 

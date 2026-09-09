@@ -58,6 +58,24 @@ async def _fail_interrupted_documents() -> None:
         logger.exception("Could not sweep interrupted documents")
 
 
+def _rebuild_missing_index() -> None:
+    """
+    Ask the worker to restore vectors for documents missing from the index.
+
+    The vector store sits on the container filesystem, which is wiped on every
+    restart and deploy, so without this a document stays "completed" while its
+    chunks are gone and chat insists it contains nothing. Only enqueued here —
+    the work happens in the worker, which owns the models.
+    """
+    try:
+        from app.worker.tasks import reindex_missing
+
+        reindex_missing.delay()
+        logger.info("Queued reindex sweep for documents missing from the index")
+    except Exception:
+        logger.exception("Could not queue reindex sweep")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle: create tables on startup."""
@@ -66,6 +84,7 @@ async def lifespan(app: FastAPI):
     # Create upload directory
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     await _fail_interrupted_documents()
+    _rebuild_missing_index()
     yield
     await engine.dispose()
 
