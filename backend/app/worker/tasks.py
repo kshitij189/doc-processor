@@ -304,9 +304,10 @@ def process_document(self, document_id: str):
         # --- Stage 7: RAG Embedding ---
         publish_progress(doc_id, "embedding_started", 92, "Generating embeddings for RAG...")
         try:
-            from app.services.rag_service import index_document_text
+            from app.services.rag_service import index_document_text, release_models
 
             stored = index_document_text(doc_id, raw_text)
+            release_models()
             if stored:
                 publish_progress(doc_id, "embedding_completed", 97, f"Embedded {stored} chunks for RAG")
             else:
@@ -358,11 +359,16 @@ def process_document(self, document_id: str):
 @celery_app.task(name="app.worker.tasks.retrieve_context", soft_time_limit=120, time_limit=150)
 def retrieve_context(question: str, document_ids: list[str] | None = None) -> dict:
     """Run the retrieval half of the RAG pipeline and return the built context."""
-    from app.services.rag_service import rag_query
+    from app.services.rag_service import rag_query, release_models
 
-    # stream=True returns {context, sources, pipeline_info} without generating
-    # an answer — the API streams that itself.
-    return rag_query(question=question, document_ids=document_ids, stream=True)
+    try:
+        # stream=True returns {context, sources, pipeline_info} without generating
+        # an answer — the API streams that itself.
+        return rag_query(question=question, document_ids=document_ids, stream=True)
+    finally:
+        # Do not hold model memory between queries; the next task may be a
+        # document being indexed, which needs the room.
+        release_models()
 
 
 @celery_app.task(name="app.worker.tasks.rag_status", soft_time_limit=60, time_limit=90)

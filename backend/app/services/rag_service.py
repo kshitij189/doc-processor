@@ -11,6 +11,7 @@ Implements:
 - Streaming LLM responses via Gemini
 """
 
+import gc
 import hashlib
 import json
 import logging
@@ -92,6 +93,33 @@ def _get_reranker() -> _OnnxReranker:
         logger.info("Loading re-ranker model: %s", settings.RERANKER_MODEL)
         _reranker = _OnnxReranker(settings.RERANKER_MODEL)
     return _reranker
+
+
+def _release_embedder() -> None:
+    """Free the embedding model once a query's retrieval phase is finished."""
+    global _embed_model
+    if _embed_model is not None:
+        _embed_model = None
+        gc.collect()
+
+
+def release_models() -> None:
+    """
+    Drop loaded models and return their memory to the OS.
+
+    A query embeds first and re-ranks afterwards, so the two models are never
+    needed at the same moment. Holding both costs more than the 512MB instance
+    has once chromadb and the worker itself are counted, and the container gets
+    OOM-killed mid-query. Releasing between phases makes the peak the larger of
+    the two models rather than their sum, which is what keeps both available
+    instead of forcing the re-ranker to be dropped.
+    """
+    global _embed_model, _reranker
+    if _embed_model is None and _reranker is None:
+        return
+    _embed_model = None
+    _reranker = None
+    gc.collect()
 
 
 def _get_chroma() -> chromadb.ClientAPI:
@@ -654,6 +682,12 @@ def rag_query(
             "sources": [],
             "pipeline_info": {"candidates": 0},
         }
+
+    # Retrieval is done with the embedder; re-ranking needs a different model.
+    # Free the embedder first so only one of the two is ever resident — see
+    # release_models(). Without this the pair exceeds the instance and the
+    # container is OOM-killed mid-query.
+    _release_embedder()
 
     # Step 3: Re-rank
     reranked = rerank(question, unique_candidates, top_k=5)
