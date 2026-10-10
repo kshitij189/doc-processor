@@ -29,3 +29,6 @@ Thumbs.db
 
 # Docker volumes
 pgdata/
+
+# Interview Prep
+docprocessor_interview_prep.md
